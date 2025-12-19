@@ -1,7 +1,6 @@
 {
   "name": "sendly/sendly-php",
   "description": "Official PHP SDK for the Sendly SMS API",
-  "version": "2.1.0",
   "type": "library",
   "license": "MIT",
   "keywords": [
