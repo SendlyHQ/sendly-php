@@ -81,7 +81,7 @@ class ClientTest extends TestCase
 
     public function testClientConstants(): void
     {
-        $this->assertSame('2.1.0', Sendly::VERSION);
+        $this->assertSame('1.0.5', Sendly::VERSION);
         $this->assertSame('https://sendly.live/api/v1', Sendly::DEFAULT_BASE_URL);
         $this->assertSame(30, Sendly::DEFAULT_TIMEOUT);
     }
