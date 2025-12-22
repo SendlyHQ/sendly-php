@@ -8,6 +8,8 @@ use GuzzleHttp\Client as GuzzleClient;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Exception\ConnectException;
 use Sendly\Resources\Messages;
+use Sendly\Resources\Webhooks;
+use Sendly\Resources\Account;
 use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\AuthenticationException;
 use Sendly\Exceptions\RateLimitException;
@@ -35,6 +37,8 @@ class Sendly
     private int $maxRetries;
     private GuzzleClient $httpClient;
     private Messages $messages;
+    private Webhooks $webhooks;
+    private Account $account;
 
     /**
      * Create a new Sendly client
@@ -66,6 +70,8 @@ class Sendly
         ]);
 
         $this->messages = new Messages($this);
+        $this->webhooks = new Webhooks($this);
+        $this->account = new Account($this);
     }
 
     /**
@@ -76,6 +82,26 @@ class Sendly
     public function messages(): Messages
     {
         return $this->messages;
+    }
+
+    /**
+     * Get the Webhooks resource
+     *
+     * @return Webhooks
+     */
+    public function webhooks(): Webhooks
+    {
+        return $this->webhooks;
+    }
+
+    /**
+     * Get the Account resource
+     *
+     * @return Account
+     */
+    public function account(): Account
+    {
+        return $this->account;
     }
 
     /**
@@ -102,6 +128,32 @@ class Sendly
     public function post(string $path, array $body = []): array
     {
         return $this->request('POST', $path, ['json' => $body]);
+    }
+
+    /**
+     * Make a PATCH request
+     *
+     * @param string $path API endpoint path
+     * @param array<string, mixed> $body Request body
+     * @return array<string, mixed> Response data
+     * @throws SendlyException
+     */
+    public function patch(string $path, array $body = []): array
+    {
+        return $this->request('PATCH', $path, ['json' => $body]);
+    }
+
+    /**
+     * Make a PUT request
+     *
+     * @param string $path API endpoint path
+     * @param array<string, mixed> $body Request body
+     * @return array<string, mixed> Response data
+     * @throws SendlyException
+     */
+    public function put(string $path, array $body = []): array
+    {
+        return $this->request('PUT', $path, ['json' => $body]);
     }
 
     /**

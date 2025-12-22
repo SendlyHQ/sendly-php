@@ -13,16 +13,31 @@ use DateTimeInterface;
 class Message
 {
     public const STATUS_QUEUED = 'queued';
-    public const STATUS_SENDING = 'sending';
     public const STATUS_SENT = 'sent';
     public const STATUS_DELIVERED = 'delivered';
     public const STATUS_FAILED = 'failed';
 
+    public const DIRECTION_OUTBOUND = 'outbound';
+    public const DIRECTION_INBOUND = 'inbound';
+
+    public const SENDER_TYPE_USER = 'user';
+    public const SENDER_TYPE_API = 'api';
+    public const SENDER_TYPE_SYSTEM = 'system';
+    public const SENDER_TYPE_CAMPAIGN = 'campaign';
+
     public readonly string $id;
     public readonly string $to;
+    public readonly ?string $from;
     public readonly string $text;
     public readonly string $status;
+    public readonly string $direction;
+    public readonly int $segments;
     public readonly int $creditsUsed;
+    public readonly bool $isSandbox;
+    public readonly ?string $senderType;
+    public readonly ?string $telnyxMessageId;
+    public readonly ?string $warning;
+    public readonly ?string $senderNote;
     public readonly DateTimeImmutable $createdAt;
     public readonly DateTimeImmutable $updatedAt;
     public readonly ?DateTimeImmutable $deliveredAt;
@@ -38,14 +53,22 @@ class Message
     {
         $this->id = $data['id'] ?? '';
         $this->to = $data['to'] ?? '';
+        $this->from = $data['from'] ?? null;
         $this->text = $data['text'] ?? '';
         $this->status = $data['status'] ?? '';
-        $this->creditsUsed = (int) ($data['credits_used'] ?? 0);
-        $this->createdAt = $this->parseDateTime($data['created_at'] ?? null) ?? new DateTimeImmutable();
-        $this->updatedAt = $this->parseDateTime($data['updated_at'] ?? null) ?? new DateTimeImmutable();
-        $this->deliveredAt = $this->parseDateTime($data['delivered_at'] ?? null);
-        $this->errorCode = $data['error_code'] ?? null;
-        $this->errorMessage = $data['error_message'] ?? null;
+        $this->direction = $data['direction'] ?? self::DIRECTION_OUTBOUND;
+        $this->segments = (int) ($data['segments'] ?? 1);
+        $this->creditsUsed = (int) ($data['credits_used'] ?? $data['creditsUsed'] ?? 0);
+        $this->isSandbox = (bool) ($data['is_sandbox'] ?? $data['isSandbox'] ?? false);
+        $this->senderType = $data['sender_type'] ?? $data['senderType'] ?? null;
+        $this->telnyxMessageId = $data['telnyx_message_id'] ?? $data['telnyxMessageId'] ?? null;
+        $this->warning = $data['warning'] ?? null;
+        $this->senderNote = $data['sender_note'] ?? $data['senderNote'] ?? null;
+        $this->createdAt = $this->parseDateTime($data['created_at'] ?? $data['createdAt'] ?? null) ?? new DateTimeImmutable();
+        $this->updatedAt = $this->parseDateTime($data['updated_at'] ?? $data['updatedAt'] ?? null) ?? new DateTimeImmutable();
+        $this->deliveredAt = $this->parseDateTime($data['delivered_at'] ?? $data['deliveredAt'] ?? null);
+        $this->errorCode = $data['error_code'] ?? $data['errorCode'] ?? null;
+        $this->errorMessage = $data['error_message'] ?? $data['errorMessage'] ?? null;
     }
 
     /**
@@ -71,7 +94,6 @@ class Message
     {
         return in_array($this->status, [
             self::STATUS_QUEUED,
-            self::STATUS_SENDING,
             self::STATUS_SENT,
         ], true);
     }
@@ -86,9 +108,17 @@ class Message
         return [
             'id' => $this->id,
             'to' => $this->to,
+            'from' => $this->from,
             'text' => $this->text,
             'status' => $this->status,
+            'direction' => $this->direction,
+            'segments' => $this->segments,
             'credits_used' => $this->creditsUsed,
+            'is_sandbox' => $this->isSandbox,
+            'sender_type' => $this->senderType,
+            'telnyx_message_id' => $this->telnyxMessageId,
+            'warning' => $this->warning,
+            'sender_note' => $this->senderNote,
             'created_at' => $this->createdAt->format(DateTimeInterface::ATOM),
             'updated_at' => $this->updatedAt->format(DateTimeInterface::ATOM),
             'delivered_at' => $this->deliveredAt?->format(DateTimeInterface::ATOM),
