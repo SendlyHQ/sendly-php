@@ -27,18 +27,26 @@ class Messages
      *
      * @param string $to Recipient phone number in E.164 format
      * @param string $text Message content (max 1600 characters)
+     * @param string|null $messageType Message type: 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
      * @return Message The sent message
      * @throws ValidationException If parameters are invalid
      */
-    public function send(string $to, string $text): Message
+    public function send(string $to, string $text, ?string $messageType = null): Message
     {
         $this->validatePhone($to);
         $this->validateText($text);
+        $this->validateMessageType($messageType);
 
-        $response = $this->client->post('/messages', [
+        $payload = [
             'to' => $to,
             'text' => $text,
-        ]);
+        ];
+
+        if ($messageType !== null) {
+            $payload['messageType'] = $messageType;
+        }
+
+        $response = $this->client->post('/messages', $payload);
 
         $data = $response['message'] ?? $response['data'] ?? $response;
         return new Message($data);
@@ -115,13 +123,15 @@ class Messages
      * @param string $text Message content (max 1600 characters)
      * @param string $scheduledAt ISO 8601 datetime for when to send
      * @param string|null $from Sender ID or phone number (optional)
+     * @param string|null $messageType Message type: 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
      * @return array<string, mixed> The scheduled message
      * @throws ValidationException If parameters are invalid
      */
-    public function schedule(string $to, string $text, string $scheduledAt, ?string $from = null): array
+    public function schedule(string $to, string $text, string $scheduledAt, ?string $from = null, ?string $messageType = null): array
     {
         $this->validatePhone($to);
         $this->validateText($text);
+        $this->validateMessageType($messageType);
 
         if (empty($scheduledAt)) {
             throw new ValidationException('Scheduled time is required');
@@ -135,6 +145,10 @@ class Messages
 
         if ($from !== null) {
             $payload['from'] = $from;
+        }
+
+        if ($messageType !== null) {
+            $payload['messageType'] = $messageType;
         }
 
         return $this->client->post('/messages/schedule', $payload);
@@ -194,14 +208,17 @@ class Messages
      *
      * @param array<array{to: string, text: string}> $messages Array of messages
      * @param string|null $from Sender ID or phone number (optional, applies to all)
+     * @param string|null $messageType Message type: 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
      * @return array<string, mixed> Batch response with batch ID and status
      * @throws ValidationException If parameters are invalid
      */
-    public function sendBatch(array $messages, ?string $from = null): array
+    public function sendBatch(array $messages, ?string $from = null, ?string $messageType = null): array
     {
         if (empty($messages)) {
             throw new ValidationException('Messages array cannot be empty');
         }
+
+        $this->validateMessageType($messageType);
 
         foreach ($messages as $index => $message) {
             if (!isset($message['to']) || !isset($message['text'])) {
@@ -214,6 +231,10 @@ class Messages
         $payload = ['messages' => $messages];
         if ($from !== null) {
             $payload['from'] = $from;
+        }
+
+        if ($messageType !== null) {
+            $payload['messageType'] = $messageType;
         }
 
         return $this->client->post('/messages/batch', $payload);
@@ -280,6 +301,20 @@ class Messages
         if (strlen($text) > 1600) {
             throw new ValidationException(
                 'Message text exceeds maximum length (1600 characters)'
+            );
+        }
+    }
+
+    /**
+     * Validate message type
+     *
+     * @throws ValidationException
+     */
+    private function validateMessageType(?string $messageType): void
+    {
+        if ($messageType !== null && !in_array($messageType, ['marketing', 'transactional'], true)) {
+            throw new ValidationException(
+                "Invalid message type: '{$messageType}'. Must be 'marketing' or 'transactional'"
             );
         }
     }
