@@ -71,9 +71,17 @@ $client = new Sendly('sk_live_v1_xxx', [
 ### Send an SMS
 
 ```php
+// Marketing message (default)
 $message = $client->messages()->send(
     '+15551234567',
-    'Hello from Sendly!'
+    'Check out our new features!'
+);
+
+// Transactional message (bypasses quiet hours)
+$message = $client->messages()->send(
+    '+15551234567',
+    'Your verification code is: 123456',
+    ['messageType' => 'transactional']
 );
 
 echo $message->id;
@@ -211,11 +219,12 @@ Use test API keys (`sk_test_v1_xxx`) with these test numbers:
 
 | Number | Behavior |
 |--------|----------|
-| +15550001234 | Success |
-| +15550001001 | Invalid number |
-| +15550001002 | Carrier rejected |
-| +15550001003 | No credits |
-| +15550001004 | Rate limited |
+| +15005550000 | Success (instant) |
+| +15005550001 | Fails: invalid_number |
+| +15005550002 | Fails: unroutable_destination |
+| +15005550003 | Fails: queue_full |
+| +15005550004 | Fails: rate_limit_exceeded |
+| +15005550006 | Fails: carrier_violation |
 
 ## License
 
