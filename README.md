@@ -123,6 +123,55 @@ echo $message->status;
 echo $message->deliveredAt?->format('Y-m-d H:i:s');
 ```
 
+### Scheduling Messages
+
+```php
+// Schedule a message for future delivery
+$scheduled = $client->messages()->schedule(
+    '+15551234567',
+    'Your appointment is tomorrow!',
+    '2025-01-15T10:00:00Z'
+);
+
+echo $scheduled->id;
+echo $scheduled->scheduledAt;
+
+// List scheduled messages
+$result = $client->messages()->listScheduled();
+foreach ($result as $msg) {
+    echo "{$msg->id}: {$msg->scheduledAt}\n";
+}
+
+// Get a specific scheduled message
+$msg = $client->messages()->getScheduled('sched_xxx');
+
+// Cancel a scheduled message (refunds credits)
+$result = $client->messages()->cancelScheduled('sched_xxx');
+echo "Refunded: {$result->creditsRefunded} credits";
+```
+
+### Batch Messages
+
+```php
+// Send multiple messages in one API call (up to 1000)
+$batch = $client->messages()->sendBatch([
+    ['to' => '+15551234567', 'text' => 'Hello User 1!'],
+    ['to' => '+15559876543', 'text' => 'Hello User 2!'],
+    ['to' => '+15551112222', 'text' => 'Hello User 3!'],
+]);
+
+echo $batch->batchId;
+echo "Queued: {$batch->queued}";
+echo "Failed: {$batch->failed}";
+echo "Credits used: {$batch->creditsUsed}";
+
+// Get batch status
+$status = $client->messages()->getBatch('batch_xxx');
+
+// List all batches
+$batches = $client->messages()->listBatches();
+```
+
 ### Iterate All Messages
 
 ```php
@@ -134,6 +183,66 @@ foreach ($client->messages()->each() as $message) {
 // With filters
 foreach ($client->messages()->each(['status' => 'delivered']) as $message) {
     echo "Delivered: {$message->id}\n";
+}
+```
+
+## Webhooks
+
+```php
+// Create a webhook endpoint
+$webhook = $client->webhooks()->create(
+    'https://example.com/webhooks/sendly',
+    ['message.delivered', 'message.failed']
+);
+
+echo $webhook->id;
+echo $webhook->secret; // Store securely!
+
+// List all webhooks
+$webhooks = $client->webhooks()->list();
+
+// Get a specific webhook
+$wh = $client->webhooks()->get('whk_xxx');
+
+// Update a webhook
+$client->webhooks()->update('whk_xxx', [
+    'url' => 'https://new-endpoint.example.com/webhook',
+    'events' => ['message.delivered', 'message.failed', 'message.sent']
+]);
+
+// Test a webhook
+$result = $client->webhooks()->test('whk_xxx');
+
+// Rotate webhook secret
+$rotation = $client->webhooks()->rotateSecret('whk_xxx');
+
+// Delete a webhook
+$client->webhooks()->delete('whk_xxx');
+```
+
+## Account & Credits
+
+```php
+// Get account information
+$account = $client->account()->get();
+echo $account->email;
+
+// Check credit balance
+$credits = $client->account()->getCredits();
+echo "Available: {$credits->availableBalance} credits";
+echo "Reserved: {$credits->reservedBalance} credits";
+echo "Total: {$credits->balance} credits";
+
+// View credit transaction history
+$transactions = $client->account()->getCreditTransactions();
+foreach ($transactions as $tx) {
+    echo "{$tx->type}: {$tx->amount} credits - {$tx->description}\n";
+}
+
+// List API keys
+$keys = $client->account()->listApiKeys();
+foreach ($keys as $key) {
+    echo "{$key->name}: {$key->prefix}*** ({$key->type})\n";
 }
 ```
 
