@@ -170,6 +170,14 @@ $status = $client->messages()->getBatch('batch_xxx');
 
 // List all batches
 $batches = $client->messages()->listBatches();
+
+// Preview batch (dry run) - validates without sending
+$preview = $client->messages()->previewBatch([
+    ['to' => '+15551234567', 'text' => 'Hello User 1!'],
+    ['to' => '+447700900123', 'text' => 'Hello UK!'],
+]);
+echo "Total credits needed: {$preview->totalCredits}";
+echo "Valid: {$preview->valid}, Invalid: {$preview->invalid}";
 ```
 
 ### Iterate All Messages
@@ -218,6 +226,12 @@ $rotation = $client->webhooks()->rotateSecret('whk_xxx');
 
 // Delete a webhook
 $client->webhooks()->delete('whk_xxx');
+
+// List available webhook event types
+$eventTypes = $client->webhooks()->listEventTypes();
+foreach ($eventTypes as $eventType) {
+    echo "Event: {$eventType}\n";
+}
 ```
 
 ## Account & Credits
@@ -244,6 +258,24 @@ $keys = $client->account()->listApiKeys();
 foreach ($keys as $key) {
     echo "{$key->name}: {$key->prefix}*** ({$key->type})\n";
 }
+
+// Get a specific API key
+$key = $client->account()->getApiKey('key_xxx');
+
+// Get API key usage stats
+$usage = $client->account()->getApiKeyUsage('key_xxx');
+echo "Messages sent: {$usage->messagesSent}";
+
+// Create a new API key
+$newKey = $client->account()->createApiKey([
+    'name' => 'Production Key',
+    'type' => 'live',
+    'scopes' => ['sms:send', 'sms:read']
+]);
+echo "New key: {$newKey->key}"; // Only shown once!
+
+// Revoke an API key
+$client->account()->revokeApiKey('key_xxx');
 ```
 
 ## Error Handling

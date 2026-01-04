@@ -263,4 +263,21 @@ class Webhooks
         $data = $response['delivery'] ?? $response['data'] ?? $response;
         return new WebhookDelivery($data);
     }
+
+    /**
+     * List available webhook event types
+     *
+     * @return array<string> List of event type strings
+     */
+    public function listEventTypes(): array
+    {
+        $response = $this->client->get('/webhooks/event-types');
+        $events = $response['events'] ?? [];
+
+        if (!is_array($events)) {
+            return [];
+        }
+
+        return array_map(fn($event) => $event['type'] ?? '', $events);
+    }
 }

@@ -78,7 +78,7 @@ class Account
      */
     public function apiKeys(): array
     {
-        $response = $this->client->get('/account/api-keys');
+        $response = $this->client->get('/account/keys');
         $keys = $response['api_keys'] ?? $response['apiKeys'] ?? $response['data'] ?? $response;
 
         if (!is_array($keys)) {
@@ -106,12 +106,47 @@ class Account
             $payload['expires_at'] = $options['expiresAt'];
         }
 
-        $response = $this->client->post('/account/api-keys', $payload);
+        $response = $this->client->post('/account/keys', $payload);
 
         return [
             'apiKey' => new ApiKey($response['api_key'] ?? $response['apiKey'] ?? $response),
             'key' => $response['key'] ?? '',
         ];
+    }
+
+    /**
+     * Get a specific API key by ID
+     *
+     * @param string $id API key ID
+     * @return ApiKey The API key
+     * @throws ValidationException If ID is empty
+     */
+    public function getApiKey(string $id): ApiKey
+    {
+        if (empty($id)) {
+            throw new ValidationException('API key ID is required');
+        }
+
+        $response = $this->client->get("/account/keys/{$id}");
+        $data = $response['api_key'] ?? $response['apiKey'] ?? $response['data'] ?? $response;
+        return new ApiKey($data);
+    }
+
+    /**
+     * Get usage statistics for a specific API key
+     *
+     * @param string $id API key ID
+     * @return array<string, mixed> Usage statistics
+     * @throws ValidationException If ID is empty
+     */
+    public function getApiKeyUsage(string $id): array
+    {
+        if (empty($id)) {
+            throw new ValidationException('API key ID is required');
+        }
+
+        $response = $this->client->get("/account/keys/{$id}/usage");
+        return $response['usage'] ?? $response['data'] ?? $response;
     }
 
     /**
@@ -127,7 +162,7 @@ class Account
             throw new ValidationException('API key ID is required');
         }
 
-        $this->client->delete("/account/api-keys/{$id}");
+        $this->client->delete("/account/keys/{$id}");
         return true;
     }
 }

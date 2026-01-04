@@ -274,6 +274,43 @@ class Messages
     }
 
     /**
+     * Preview a batch without sending (dry run)
+     *
+     * @param array<array{to: string, text: string}> $messages Array of messages
+     * @param string|null $from Sender ID or phone number (optional, applies to all)
+     * @param string|null $messageType Message type: 'marketing' (default) or 'transactional'
+     * @return array<string, mixed> Preview showing what would happen if batch was sent
+     * @throws ValidationException If parameters are invalid
+     */
+    public function previewBatch(array $messages, ?string $from = null, ?string $messageType = null): array
+    {
+        if (empty($messages)) {
+            throw new ValidationException('Messages array cannot be empty');
+        }
+
+        $this->validateMessageType($messageType);
+
+        foreach ($messages as $index => $message) {
+            if (!isset($message['to']) || !isset($message['text'])) {
+                throw new ValidationException("Message at index {$index} must have 'to' and 'text' fields");
+            }
+            $this->validatePhone($message['to']);
+            $this->validateText($message['text']);
+        }
+
+        $payload = ['messages' => $messages];
+        if ($from !== null) {
+            $payload['from'] = $from;
+        }
+
+        if ($messageType !== null) {
+            $payload['messageType'] = $messageType;
+        }
+
+        return $this->client->post('/messages/batch/preview', $payload);
+    }
+
+    /**
      * Validate phone number format
      *
      * @throws ValidationException
