@@ -1,3 +1,12 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/SendlyHQ/sendly-php/main/.github/header.svg" alt="Sendly PHP SDK" />
+</p>
+
+<p align="center">
+  <a href="https://packagist.org/packages/sendly/sendly"><img src="https://img.shields.io/packagist/v/sendly/sendly.svg?style=flat-square" alt="Packagist" /></a>
+  <a href="https://github.com/SendlyHQ/sendly-php/blob/main/LICENSE"><img src="https://img.shields.io/github/license/SendlyHQ/sendly-php?style=flat-square" alt="license" /></a>
+</p>
+
 # Sendly PHP SDK
 
 Official PHP SDK for the Sendly SMS API.
