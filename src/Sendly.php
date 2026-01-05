@@ -10,6 +10,8 @@ use GuzzleHttp\Exception\ConnectException;
 use Sendly\Resources\Messages;
 use Sendly\Resources\Webhooks;
 use Sendly\Resources\Account;
+use Sendly\Resources\Verify;
+use Sendly\Resources\Templates;
 use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\AuthenticationException;
 use Sendly\Exceptions\RateLimitException;
@@ -39,6 +41,8 @@ class Sendly
     private Messages $messages;
     private Webhooks $webhooks;
     private Account $account;
+    private Verify $verify;
+    private Templates $templates;
 
     /**
      * Create a new Sendly client
@@ -72,6 +76,8 @@ class Sendly
         $this->messages = new Messages($this);
         $this->webhooks = new Webhooks($this);
         $this->account = new Account($this);
+        $this->verify = new Verify($this);
+        $this->templates = new Templates($this);
     }
 
     /**
@@ -102,6 +108,26 @@ class Sendly
     public function account(): Account
     {
         return $this->account;
+    }
+
+    /**
+     * Get the Verify resource
+     *
+     * @return Verify
+     */
+    public function verify(): Verify
+    {
+        return $this->verify;
+    }
+
+    /**
+     * Get the Templates resource
+     *
+     * @return Templates
+     */
+    public function templates(): Templates
+    {
+        return $this->templates;
     }
 
     /**
