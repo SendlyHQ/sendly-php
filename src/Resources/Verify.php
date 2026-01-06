@@ -6,13 +6,53 @@ namespace Sendly\Resources;
 
 use Sendly\Sendly;
 
-class Verify
+class Sessions
 {
     private Sendly $client;
 
     public function __construct(Sendly $client)
     {
         $this->client = $client;
+    }
+
+    /**
+     * Create a hosted verification session
+     *
+     * @param array{
+     *   success_url: string,
+     *   cancel_url?: string,
+     *   brand_name?: string,
+     *   brand_color?: string,
+     *   metadata?: array<string, mixed>
+     * } $options Session options
+     * @return array<string, mixed>
+     */
+    public function create(array $options): array
+    {
+        return $this->client->post('/verify/sessions', $options);
+    }
+
+    /**
+     * Validate a session token after user completes verification
+     *
+     * @param string $token The one-time token from callback
+     * @return array{valid: bool, session_id?: string, phone?: string, verified_at?: string, metadata?: array<string, mixed>}
+     */
+    public function validate(string $token): array
+    {
+        return $this->client->post('/verify/sessions/validate', ['token' => $token]);
+    }
+}
+
+class Verify
+{
+    private Sendly $client;
+    public Sessions $sessions;
+
+    public function __construct(Sendly $client)
+    {
+        $this->client = $client;
+        $this->sessions = new Sessions($client);
     }
 
     /**
