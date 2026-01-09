@@ -15,6 +15,7 @@ class Webhook
     public const EVENT_MESSAGE_SENT = 'message.sent';
     public const EVENT_MESSAGE_DELIVERED = 'message.delivered';
     public const EVENT_MESSAGE_FAILED = 'message.failed';
+    public const EVENT_MESSAGE_BOUNCED = 'message.bounced';
     public const EVENT_MESSAGE_RECEIVED = 'message.received';
 
     public const CIRCUIT_STATE_CLOSED = 'closed';

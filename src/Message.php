@@ -16,6 +16,7 @@ class Message
     public const STATUS_SENT = 'sent';
     public const STATUS_DELIVERED = 'delivered';
     public const STATUS_FAILED = 'failed';
+    public const STATUS_BOUNCED = 'bounced';
 
     public const DIRECTION_OUTBOUND = 'outbound';
     public const DIRECTION_INBOUND = 'inbound';
@@ -85,6 +86,14 @@ class Message
     public function isFailed(): bool
     {
         return $this->status === self::STATUS_FAILED;
+    }
+
+    /**
+     * Check if message bounced (carrier rejected)
+     */
+    public function isBounced(): bool
+    {
+        return $this->status === self::STATUS_BOUNCED;
     }
 
     /**
