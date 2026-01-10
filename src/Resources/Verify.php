@@ -74,7 +74,7 @@ class Verify
      */
     public function send(string $phone, array $options = []): array
     {
-        $body = array_merge(['phone' => $phone], $options);
+        $body = array_merge(['to' => $phone], $options);
         return $this->client->post('/verify', $body);
     }
 
