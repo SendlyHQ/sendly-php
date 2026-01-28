@@ -12,6 +12,8 @@ use Sendly\Resources\Webhooks;
 use Sendly\Resources\Account;
 use Sendly\Resources\Verify;
 use Sendly\Resources\Templates;
+use Sendly\Resources\Campaigns;
+use Sendly\Resources\Contacts;
 use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\AuthenticationException;
 use Sendly\Exceptions\RateLimitException;
@@ -43,6 +45,8 @@ class Sendly
     private Account $account;
     private Verify $verify;
     private Templates $templates;
+    private Campaigns $campaigns;
+    private Contacts $contacts;
 
     /**
      * Create a new Sendly client
@@ -78,6 +82,8 @@ class Sendly
         $this->account = new Account($this);
         $this->verify = new Verify($this);
         $this->templates = new Templates($this);
+        $this->campaigns = new Campaigns($this);
+        $this->contacts = new Contacts($this);
     }
 
     /**
@@ -128,6 +134,26 @@ class Sendly
     public function templates(): Templates
     {
         return $this->templates;
+    }
+
+    /**
+     * Get the Campaigns resource
+     *
+     * @return Campaigns
+     */
+    public function campaigns(): Campaigns
+    {
+        return $this->campaigns;
+    }
+
+    /**
+     * Get the Contacts resource
+     *
+     * @return Contacts
+     */
+    public function contacts(): Contacts
+    {
+        return $this->contacts;
     }
 
     /**
