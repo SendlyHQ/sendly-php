@@ -28,10 +28,11 @@ class Messages
      * @param string $to Recipient phone number in E.164 format
      * @param string $text Message content (max 1600 characters)
      * @param string|null $messageType Message type: 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
+     * @param array<string, mixed>|null $metadata Custom JSON metadata to attach to the message (max 4KB)
      * @return Message The sent message
      * @throws ValidationException If parameters are invalid
      */
-    public function send(string $to, string $text, ?string $messageType = null): Message
+    public function send(string $to, string $text, ?string $messageType = null, ?array $metadata = null): Message
     {
         $this->validatePhone($to);
         $this->validateText($text);
@@ -44,6 +45,10 @@ class Messages
 
         if ($messageType !== null) {
             $payload['messageType'] = $messageType;
+        }
+
+        if ($metadata !== null) {
+            $payload['metadata'] = $metadata;
         }
 
         $response = $this->client->post('/messages', $payload);
@@ -124,10 +129,11 @@ class Messages
      * @param string $scheduledAt ISO 8601 datetime for when to send
      * @param string|null $from Sender ID or phone number (optional)
      * @param string|null $messageType Message type: 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
+     * @param array<string, mixed>|null $metadata Custom JSON metadata to attach to the message (max 4KB)
      * @return array<string, mixed> The scheduled message
      * @throws ValidationException If parameters are invalid
      */
-    public function schedule(string $to, string $text, string $scheduledAt, ?string $from = null, ?string $messageType = null): array
+    public function schedule(string $to, string $text, string $scheduledAt, ?string $from = null, ?string $messageType = null, ?array $metadata = null): array
     {
         $this->validatePhone($to);
         $this->validateText($text);
@@ -149,6 +155,10 @@ class Messages
 
         if ($messageType !== null) {
             $payload['messageType'] = $messageType;
+        }
+
+        if ($metadata !== null) {
+            $payload['metadata'] = $metadata;
         }
 
         return $this->client->post('/messages/schedule', $payload);
@@ -209,10 +219,11 @@ class Messages
      * @param array<array{to: string, text: string}> $messages Array of messages
      * @param string|null $from Sender ID or phone number (optional, applies to all)
      * @param string|null $messageType Message type: 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
+     * @param array<string, mixed>|null $metadata Custom JSON metadata to attach to all messages (max 4KB)
      * @return array<string, mixed> Batch response with batch ID and status
      * @throws ValidationException If parameters are invalid
      */
-    public function sendBatch(array $messages, ?string $from = null, ?string $messageType = null): array
+    public function sendBatch(array $messages, ?string $from = null, ?string $messageType = null, ?array $metadata = null): array
     {
         if (empty($messages)) {
             throw new ValidationException('Messages array cannot be empty');
@@ -235,6 +246,10 @@ class Messages
 
         if ($messageType !== null) {
             $payload['messageType'] = $messageType;
+        }
+
+        if ($metadata !== null) {
+            $payload['metadata'] = $metadata;
         }
 
         return $this->client->post('/messages/batch', $payload);
