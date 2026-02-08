@@ -44,6 +44,8 @@ class Message
     public readonly ?DateTimeImmutable $deliveredAt;
     public readonly ?string $errorCode;
     public readonly ?string $errorMessage;
+    /** @var array<string, mixed>|null Custom metadata attached to the message */
+    public readonly ?array $metadata;
 
     /**
      * Create a Message from API response data
@@ -70,6 +72,7 @@ class Message
         $this->deliveredAt = $this->parseDateTime($data['delivered_at'] ?? $data['deliveredAt'] ?? null);
         $this->errorCode = $data['error_code'] ?? $data['errorCode'] ?? null;
         $this->errorMessage = $data['error_message'] ?? $data['errorMessage'] ?? null;
+        $this->metadata = $data['metadata'] ?? null;
     }
 
     /**
@@ -133,6 +136,7 @@ class Message
             'delivered_at' => $this->deliveredAt?->format(DateTimeInterface::ATOM),
             'error_code' => $this->errorCode,
             'error_message' => $this->errorMessage,
+            'metadata' => $this->metadata,
         ];
     }
 

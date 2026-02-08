@@ -90,7 +90,15 @@ $message = $client->messages()->send(
 $message = $client->messages()->send(
     '+15551234567',
     'Your verification code is: 123456',
-    ['messageType' => 'transactional']
+    'transactional'
+);
+
+// With custom metadata (max 4KB)
+$message = $client->messages()->send(
+    '+15551234567',
+    'Your order #12345 has shipped!',
+    null, // messageType
+    ['order_id' => '12345', 'customer_id' => 'cust_abc']
 );
 
 echo $message->id;
