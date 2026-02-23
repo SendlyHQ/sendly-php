@@ -165,4 +165,19 @@ class Account
         $this->client->delete("/account/keys/{$id}");
         return true;
     }
+
+    public function transferCredits(string $targetOrganizationId, int $amount): array
+    {
+        if (empty($targetOrganizationId)) {
+            throw new ValidationException('Target organization ID is required');
+        }
+        if ($amount <= 0) {
+            throw new ValidationException('Amount must be a positive integer');
+        }
+
+        return $this->client->post('/credits/transfer', [
+            'targetOrganizationId' => $targetOrganizationId,
+            'amount' => $amount,
+        ]);
+    }
 }
