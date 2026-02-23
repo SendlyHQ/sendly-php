@@ -175,6 +175,22 @@ class Webhooks
     }
 
     /**
+     * Reset the circuit breaker for a webhook
+     *
+     * @param string $id Webhook ID
+     * @return array Reset confirmation with updated webhook
+     * @throws ValidationException If ID is empty
+     */
+    public function resetCircuit(string $id): array
+    {
+        if (empty($id)) {
+            throw new ValidationException('Webhook ID is required');
+        }
+
+        return $this->client->post("/webhooks/{$id}/reset-circuit");
+    }
+
+    /**
      * Rotate a webhook's secret
      *
      * @param string $id Webhook ID
