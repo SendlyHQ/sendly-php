@@ -17,6 +17,7 @@ class Message
     public const STATUS_DELIVERED = 'delivered';
     public const STATUS_FAILED = 'failed';
     public const STATUS_BOUNCED = 'bounced';
+    public const STATUS_RETRYING = 'retrying';
 
     public const DIRECTION_OUTBOUND = 'outbound';
     public const DIRECTION_INBOUND = 'inbound';
@@ -44,6 +45,7 @@ class Message
     public readonly ?DateTimeImmutable $deliveredAt;
     public readonly ?string $errorCode;
     public readonly ?string $errorMessage;
+    public readonly int $retryCount;
     /** @var array<string, mixed>|null Custom metadata attached to the message */
     public readonly ?array $metadata;
 
@@ -72,6 +74,7 @@ class Message
         $this->deliveredAt = $this->parseDateTime($data['delivered_at'] ?? $data['deliveredAt'] ?? null);
         $this->errorCode = $data['error_code'] ?? $data['errorCode'] ?? null;
         $this->errorMessage = $data['error_message'] ?? $data['errorMessage'] ?? null;
+        $this->retryCount = (int) ($data['retry_count'] ?? $data['retryCount'] ?? 0);
         $this->metadata = $data['metadata'] ?? null;
     }
 
@@ -136,6 +139,7 @@ class Message
             'delivered_at' => $this->deliveredAt?->format(DateTimeInterface::ATOM),
             'error_code' => $this->errorCode,
             'error_message' => $this->errorMessage,
+            'retry_count' => $this->retryCount,
             'metadata' => $this->metadata,
         ];
     }
