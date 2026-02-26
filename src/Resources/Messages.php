@@ -23,16 +23,17 @@ class Messages
     }
 
     /**
-     * Send an SMS message
+     * Send an SMS or MMS message
      *
      * @param string $to Recipient phone number in E.164 format
      * @param string $text Message content (max 1600 characters)
      * @param string|null $messageType Message type: 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
      * @param array<string, mixed>|null $metadata Custom JSON metadata to attach to the message (max 4KB)
+     * @param array<string>|null $mediaUrls Array of media URLs to attach (sends as MMS)
      * @return Message The sent message
      * @throws ValidationException If parameters are invalid
      */
-    public function send(string $to, string $text, ?string $messageType = null, ?array $metadata = null): Message
+    public function send(string $to, string $text, ?string $messageType = null, ?array $metadata = null, ?array $mediaUrls = null): Message
     {
         $this->validatePhone($to);
         $this->validateText($text);
@@ -49,6 +50,10 @@ class Messages
 
         if ($metadata !== null) {
             $payload['metadata'] = $metadata;
+        }
+
+        if ($mediaUrls !== null) {
+            $payload['mediaUrls'] = $mediaUrls;
         }
 
         $response = $this->client->post('/messages', $payload);

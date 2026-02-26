@@ -14,6 +14,7 @@ use Sendly\Resources\Verify;
 use Sendly\Resources\Templates;
 use Sendly\Resources\Campaigns;
 use Sendly\Resources\Contacts;
+use Sendly\Resources\Media;
 use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\AuthenticationException;
 use Sendly\Exceptions\RateLimitException;
@@ -47,6 +48,7 @@ class Sendly
     private Templates $templates;
     private Campaigns $campaigns;
     private Contacts $contacts;
+    private Media $media;
 
     /**
      * Create a new Sendly client
@@ -84,6 +86,7 @@ class Sendly
         $this->templates = new Templates($this);
         $this->campaigns = new Campaigns($this);
         $this->contacts = new Contacts($this);
+        $this->media = new Media($this);
     }
 
     /**
@@ -157,6 +160,16 @@ class Sendly
     }
 
     /**
+     * Get the Media resource
+     *
+     * @return Media
+     */
+    public function media(): Media
+    {
+        return $this->media;
+    }
+
+    /**
      * Make a GET request
      *
      * @param string $path API endpoint path
@@ -218,6 +231,19 @@ class Sendly
     public function delete(string $path): array
     {
         return $this->request('DELETE', $path);
+    }
+
+    /**
+     * Make a POST request with multipart form data
+     *
+     * @param string $path API endpoint path
+     * @param array<array{name: string, contents: mixed, filename?: string, headers?: array<string, string>}> $multipart Multipart form fields
+     * @return array<string, mixed> Response data
+     * @throws SendlyException
+     */
+    public function postMultipart(string $path, array $multipart): array
+    {
+        return $this->request('POST', $path, ['multipart' => $multipart]);
     }
 
     /**
