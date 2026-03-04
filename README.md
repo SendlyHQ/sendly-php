@@ -384,6 +384,78 @@ Use test API keys (`sk_test_v1_xxx`) with these test numbers:
 | +15005550004 | Fails: rate_limit_exceeded |
 | +15005550006 | Fails: carrier_violation |
 
+## Enterprise
+
+The Enterprise API lets you programmatically manage workspaces, verification, credits, and API keys for multi-tenant platforms. Requires an enterprise master key (`sk_live_v1_master_*`).
+
+### Quick Provision
+
+Create a fully configured workspace in a single call:
+
+```php
+$client = new Sendly\Client('sk_live_v1_master_YOUR_KEY');
+
+$result = $client->enterprise->provision([
+    'name' => 'Acme Insurance - Austin',
+    'sourceWorkspaceId' => 'ws_verified',
+    'creditAmount' => 5000,
+    'creditSourceWorkspaceId' => 'ws_pool',
+    'keyName' => 'Production',
+    'keyType' => 'live',
+    'generateOptInPage' => true,
+]);
+
+echo $result['workspace']['id'];
+echo $result['apiKey']['rawKey'];
+```
+
+Three provisioning modes:
+
+| Mode | Params | Description |
+|------|--------|-------------|
+| **Inherit** | `sourceWorkspaceId` | Shares toll-free number from verified workspace |
+| **Inherit + New Number** | `sourceWorkspaceId` + `inheritWithNewNumber => true` | Copies business info, purchases new number |
+| **Fresh** | `verification => [...]` | Full business details, new number + carrier approval |
+
+### Workspace Management
+
+```php
+$ws = $client->enterprise->workspaces->create('Acme Insurance');
+$list = $client->enterprise->workspaces->list();
+$detail = $client->enterprise->workspaces->get('ws_xxx');
+$client->enterprise->workspaces->delete('ws_xxx');
+```
+
+### Credits & API Keys
+
+```php
+$client->enterprise->workspaces->transferCredits('ws_dest', [
+    'sourceWorkspaceId' => 'ws_source',
+    'amount' => 5000,
+]);
+
+$key = $client->enterprise->workspaces->createKey('ws_xxx', [
+    'name' => 'Production',
+    'type' => 'live',
+]);
+echo $key['rawKey'];
+
+$client->enterprise->workspaces->revokeKey('ws_xxx', 'key_abc');
+```
+
+### Webhooks & Analytics
+
+```php
+$client->enterprise->webhooks->set('https://yourapp.com/webhooks');
+$overview = $client->enterprise->analytics->overview();
+$messages = $client->enterprise->analytics->messages('30d');
+$delivery = $client->enterprise->analytics->delivery();
+```
+
+Full enterprise docs: [sendly.live/docs/enterprise](https://sendly.live/docs/enterprise)
+
+---
+
 ## License
 
 MIT
