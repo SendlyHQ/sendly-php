@@ -41,6 +41,7 @@ class Sendly
     private string $baseUrl;
     private int $timeout;
     private int $maxRetries;
+    private string $organizationId;
     private GuzzleClient $httpClient;
     private Messages $messages;
     private Webhooks $webhooks;
@@ -68,18 +69,9 @@ class Sendly
         $this->baseUrl = $options['baseUrl'] ?? self::DEFAULT_BASE_URL;
         $this->timeout = $options['timeout'] ?? self::DEFAULT_TIMEOUT;
         $this->maxRetries = $options['maxRetries'] ?? 3;
+        $this->organizationId = $options['organization_id'] ?? getenv('SENDLY_ORG_ID') ?: '';
 
-        $this->httpClient = new GuzzleClient([
-            'base_uri' => $this->baseUrl,
-            'timeout' => $this->timeout,
-            'connect_timeout' => 10,
-            'headers' => [
-                'Authorization' => 'Bearer ' . $this->apiKey,
-                'Content-Type' => 'application/json',
-                'Accept' => 'application/json',
-                'User-Agent' => 'sendly-php/' . self::VERSION,
-            ],
-        ]);
+        $this->buildHttpClient();
 
         $this->messages = new Messages($this);
         $this->webhooks = new Webhooks($this);
@@ -180,6 +172,33 @@ class Sendly
     public function enterprise(): Enterprise
     {
         return $this->enterprise;
+    }
+
+    public function setOrganizationId(string $id): void
+    {
+        $this->organizationId = $id;
+        $this->buildHttpClient();
+    }
+
+    private function buildHttpClient(): void
+    {
+        $headers = [
+            'Authorization' => 'Bearer ' . $this->apiKey,
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
+            'User-Agent' => 'sendly-php/' . self::VERSION,
+        ];
+
+        if ($this->organizationId !== '') {
+            $headers['X-Organization-Id'] = $this->organizationId;
+        }
+
+        $this->httpClient = new GuzzleClient([
+            'base_uri' => $this->baseUrl,
+            'timeout' => $this->timeout,
+            'connect_timeout' => 10,
+            'headers' => $headers,
+        ]);
     }
 
     /**
