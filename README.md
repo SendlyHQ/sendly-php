@@ -399,14 +399,14 @@ $result = $client->enterprise->provision([
     'name' => 'Acme Insurance - Austin',
     'sourceWorkspaceId' => 'ws_verified',
     'creditAmount' => 5000,
-    'creditSourceWorkspaceId' => 'ws_pool',
+    'creditSourceWorkspaceId' => 'SOURCE_WORKSPACE_ID',
     'keyName' => 'Production',
     'keyType' => 'live',
     'generateOptInPage' => true,
 ]);
 
 echo $result['workspace']['id'];
-echo $result['apiKey']['rawKey'];
+echo $result['key']['key'];
 ```
 
 Three provisioning modes:
@@ -438,7 +438,7 @@ $key = $client->enterprise->workspaces->createKey('ws_xxx', [
     'name' => 'Production',
     'type' => 'live',
 ]);
-echo $key['rawKey'];
+echo $key['key'];
 
 $client->enterprise->workspaces->revokeKey('ws_xxx', 'key_abc');
 ```
