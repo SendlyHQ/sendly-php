@@ -9,7 +9,7 @@
 
 # Sendly PHP SDK
 
-Official PHP SDK for the Sendly SMS API.
+Official PHP SDK for the Sendly SMS & MMS API.
 
 ## Requirements
 
@@ -156,7 +156,8 @@ echo $scheduled->scheduledAt;
 // List scheduled messages
 $result = $client->messages()->listScheduled();
 foreach ($result as $msg) {
-    echo "{$msg->id}: {$msg->scheduledAt}\n";
+    echo "{$msg->id}: {$msg->scheduledAt}
+";
 }
 
 // Get a specific scheduled message
@@ -202,12 +203,14 @@ echo "Valid: {$preview->valid}, Invalid: {$preview->invalid}";
 ```php
 // Auto-pagination with generator
 foreach ($client->messages()->each() as $message) {
-    echo "{$message->id}: {$message->to}\n";
+    echo "{$message->id}: {$message->to}
+";
 }
 
 // With filters
 foreach ($client->messages()->each(['status' => 'delivered']) as $message) {
-    echo "Delivered: {$message->id}\n";
+    echo "Delivered: {$message->id}
+";
 }
 ```
 
@@ -247,7 +250,8 @@ $client->webhooks()->delete('whk_xxx');
 // List available webhook event types
 $eventTypes = $client->webhooks()->listEventTypes();
 foreach ($eventTypes as $eventType) {
-    echo "Event: {$eventType}\n";
+    echo "Event: {$eventType}
+";
 }
 ```
 
@@ -267,13 +271,15 @@ echo "Total: {$credits->balance} credits";
 // View credit transaction history
 $transactions = $client->account()->getCreditTransactions();
 foreach ($transactions as $tx) {
-    echo "{$tx->type}: {$tx->amount} credits - {$tx->description}\n";
+    echo "{$tx->type}: {$tx->amount} credits - {$tx->description}
+";
 }
 
 // List API keys
 $keys = $client->account()->listApiKeys();
 foreach ($keys as $key) {
-    echo "{$key->name}: {$key->prefix}*** ({$key->type})\n";
+    echo "{$key->name}: {$key->prefix}*** ({$key->type})
+";
 }
 
 // Get a specific API key
