@@ -768,6 +768,44 @@ class EnterpriseBilling
     }
 }
 
+class EnterpriseCredits
+{
+    private Sendly $client;
+
+    public function __construct(Sendly $client)
+    {
+        $this->client = $client;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function get(): array
+    {
+        return $this->client->get('/enterprise/credits/pool');
+    }
+
+    /**
+     * @param int $amount
+     * @param string|null $description
+     * @return array<string, mixed>
+     * @throws ValidationException
+     */
+    public function deposit(int $amount, ?string $description = null): array
+    {
+        if ($amount <= 0) {
+            throw new ValidationException('Amount must be a positive number');
+        }
+
+        $payload = ['amount' => $amount];
+        if ($description !== null) {
+            $payload['description'] = $description;
+        }
+
+        return $this->client->post('/enterprise/credits/pool/deposit', $payload);
+    }
+}
+
 class Enterprise
 {
     private Sendly $client;
@@ -776,6 +814,7 @@ class Enterprise
     public EnterpriseAnalytics $analytics;
     public EnterpriseSettings $settings;
     public EnterpriseBilling $billing;
+    public EnterpriseCredits $credits;
 
     public function __construct(Sendly $client)
     {
@@ -785,6 +824,7 @@ class Enterprise
         $this->analytics = new EnterpriseAnalytics($client);
         $this->settings = new EnterpriseSettings($client);
         $this->billing = new EnterpriseBilling($client);
+        $this->credits = new EnterpriseCredits($client);
     }
 
     /**
