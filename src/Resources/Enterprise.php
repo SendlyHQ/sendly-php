@@ -782,7 +782,7 @@ class EnterpriseCredits
      */
     public function get(): array
     {
-        return $this->client->get('/enterprise/credits/pool');
+        return $this->client->get('/enterprise/credits');
     }
 
     /**
@@ -802,7 +802,7 @@ class EnterpriseCredits
             $payload['description'] = $description;
         }
 
-        return $this->client->post('/enterprise/credits/pool/deposit', $payload);
+        return $this->client->post('/enterprise/credits/deposit', $payload);
     }
 }
 
