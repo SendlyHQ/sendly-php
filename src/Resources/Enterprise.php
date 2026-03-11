@@ -611,7 +611,7 @@ class EnterpriseWebhooks
             throw new ValidationException('Webhook URL is required');
         }
 
-        return $this->client->put('/enterprise/webhooks', [
+        return $this->client->post('/enterprise/webhooks', [
             'url' => $options['url'],
         ]);
     }
@@ -639,6 +639,14 @@ class EnterpriseWebhooks
     public function test(): array
     {
         return $this->client->post('/enterprise/webhooks/test');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function rotateSecret(): array
+    {
+        return $this->client->post('/enterprise/webhooks/rotate-secret');
     }
 }
 
