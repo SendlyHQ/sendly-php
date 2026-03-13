@@ -161,6 +161,8 @@ class WebhookMessageData
     public readonly int $creditsUsed;
     public readonly ?string $messageFormat;
     public readonly ?array $mediaUrls;
+    public readonly ?int $retryCount;
+    public readonly ?array $metadata;
 
     public function __construct(object $data)
     {
@@ -180,11 +182,53 @@ class WebhookMessageData
         $this->creditsUsed = $data->credits_used ?? 0;
         $this->messageFormat = $data->message_format ?? null;
         $this->mediaUrls = isset($data->media_urls) ? (array)$data->media_urls : null;
+        $this->retryCount = $data->retry_count ?? null;
+        $this->metadata = isset($data->metadata) ? (array)$data->metadata : null;
     }
 
     /** @deprecated Use $id instead */
     public function getMessageId(): string
     {
         return $this->id;
+    }
+}
+
+class WebhookVerificationData
+{
+    public function __construct(
+        public readonly string $id,
+        public readonly ?string $organizationId,
+        public readonly string $phone,
+        public readonly string $status,
+        public readonly string $deliveryStatus,
+        public readonly int $attempts,
+        public readonly int $maxAttempts,
+        public readonly int|string|null $expiresAt,
+        public readonly int|string|null $verifiedAt,
+        public readonly int|string|null $createdAt,
+        public readonly ?string $appName,
+        public readonly ?string $templateId,
+        public readonly ?string $profileId,
+        public readonly ?array $metadata,
+    ) {}
+
+    public static function fromArray(array $data): self
+    {
+        return new self(
+            id: $data['id'] ?? '',
+            organizationId: $data['organization_id'] ?? null,
+            phone: $data['phone'] ?? '',
+            status: $data['status'] ?? '',
+            deliveryStatus: $data['delivery_status'] ?? 'queued',
+            attempts: $data['attempts'] ?? 0,
+            maxAttempts: $data['max_attempts'] ?? 3,
+            expiresAt: $data['expires_at'] ?? null,
+            verifiedAt: $data['verified_at'] ?? null,
+            createdAt: $data['created_at'] ?? null,
+            appName: $data['app_name'] ?? null,
+            templateId: $data['template_id'] ?? null,
+            profileId: $data['profile_id'] ?? null,
+            metadata: $data['metadata'] ?? null,
+        );
     }
 }
