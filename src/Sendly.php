@@ -16,6 +16,7 @@ use Sendly\Resources\Campaigns;
 use Sendly\Resources\Contacts;
 use Sendly\Resources\Media;
 use Sendly\Resources\Enterprise;
+use Sendly\Resources\Conversations;
 use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\AuthenticationException;
 use Sendly\Exceptions\RateLimitException;
@@ -52,6 +53,7 @@ class Sendly
     private Contacts $contacts;
     private Media $media;
     private Enterprise $enterprise;
+    private Conversations $conversations;
 
     /**
      * Create a new Sendly client
@@ -82,6 +84,7 @@ class Sendly
         $this->contacts = new Contacts($this);
         $this->media = new Media($this);
         $this->enterprise = new Enterprise($this);
+        $this->conversations = new Conversations($this);
     }
 
     /**
@@ -172,6 +175,16 @@ class Sendly
     public function enterprise(): Enterprise
     {
         return $this->enterprise;
+    }
+
+    /**
+     * Get the Conversations resource
+     *
+     * @return Conversations
+     */
+    public function conversations(): Conversations
+    {
+        return $this->conversations;
     }
 
     public function setOrganizationId(string $id): void
