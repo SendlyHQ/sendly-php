@@ -48,6 +48,8 @@ class Message
     public readonly int $retryCount;
     /** @var array<string, mixed>|null Custom metadata attached to the message */
     public readonly ?array $metadata;
+    /** @var array<string, mixed>|null AI classification metadata for inbound messages */
+    public readonly ?array $aiMetadata;
 
     /**
      * Create a Message from API response data
@@ -76,6 +78,7 @@ class Message
         $this->errorMessage = $data['error_message'] ?? $data['errorMessage'] ?? null;
         $this->retryCount = (int) ($data['retry_count'] ?? $data['retryCount'] ?? 0);
         $this->metadata = $data['metadata'] ?? null;
+        $this->aiMetadata = $data['ai_metadata'] ?? $data['aiMetadata'] ?? null;
     }
 
     /**
@@ -141,6 +144,7 @@ class Message
             'error_message' => $this->errorMessage,
             'retry_count' => $this->retryCount,
             'metadata' => $this->metadata,
+            'ai_metadata' => $this->aiMetadata,
         ];
     }
 
