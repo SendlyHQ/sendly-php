@@ -164,4 +164,48 @@ class Conversations
 
         return $this->client->post("/conversations/{$id}/mark-read");
     }
+
+    /**
+     * Add labels to a conversation
+     *
+     * @param string $id Conversation ID
+     * @param array<string> $labelIds Label IDs to add
+     * @return array<string, mixed>
+     * @throws ValidationException If parameters are invalid
+     */
+    public function addLabels(string $id, array $labelIds): array
+    {
+        if (empty($id)) {
+            throw new ValidationException('Conversation ID is required');
+        }
+
+        if (empty($labelIds)) {
+            throw new ValidationException('Label IDs are required');
+        }
+
+        return $this->client->post("/conversations/{$id}/labels", [
+            'labelIds' => $labelIds,
+        ]);
+    }
+
+    /**
+     * Remove a label from a conversation
+     *
+     * @param string $id Conversation ID
+     * @param string $labelId Label ID to remove
+     * @return array<string, mixed>
+     * @throws ValidationException If parameters are invalid
+     */
+    public function removeLabel(string $id, string $labelId): array
+    {
+        if (empty($id)) {
+            throw new ValidationException('Conversation ID is required');
+        }
+
+        if (empty($labelId)) {
+            throw new ValidationException('Label ID is required');
+        }
+
+        return $this->client->delete("/conversations/{$id}/labels/{$labelId}");
+    }
 }
