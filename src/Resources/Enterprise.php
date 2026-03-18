@@ -886,4 +886,38 @@ class Enterprise
 
         return $this->client->post('/enterprise/workspaces/provision', $payload);
     }
+
+    /**
+     * @param array{businessName: string, useCase?: string, useCaseSummary?: string, contactEmail?: string, contactPhone?: string, businessAddress?: string, socialUrl?: string} $options
+     * @return array<string, mixed>
+     * @throws ValidationException
+     */
+    public function generateBusinessPage(array $options): array
+    {
+        if (empty($options['businessName'])) {
+            throw new ValidationException('Business name is required');
+        }
+
+        $payload = ['businessName' => $options['businessName']];
+        if (isset($options['useCase'])) {
+            $payload['useCase'] = $options['useCase'];
+        }
+        if (isset($options['useCaseSummary'])) {
+            $payload['useCaseSummary'] = $options['useCaseSummary'];
+        }
+        if (isset($options['contactEmail'])) {
+            $payload['contactEmail'] = $options['contactEmail'];
+        }
+        if (isset($options['contactPhone'])) {
+            $payload['contactPhone'] = $options['contactPhone'];
+        }
+        if (isset($options['businessAddress'])) {
+            $payload['businessAddress'] = $options['businessAddress'];
+        }
+        if (isset($options['socialUrl'])) {
+            $payload['socialUrl'] = $options['socialUrl'];
+        }
+
+        return $this->client->post('/verification/business-page/generate', $payload);
+    }
 }
