@@ -918,6 +918,6 @@ class Enterprise
             $payload['socialUrl'] = $options['socialUrl'];
         }
 
-        return $this->client->post('/verification/business-page/generate', $payload);
+        return $this->client->post('/enterprise/business-page/generate', $payload);
     }
 }
