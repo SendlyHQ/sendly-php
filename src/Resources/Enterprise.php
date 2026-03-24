@@ -920,4 +920,45 @@ class Enterprise
 
         return $this->client->post('/enterprise/business-page/generate', $payload);
     }
+
+    /**
+     * @param string $filePath
+     * @param array{workspaceId?: string, verificationId?: string} $options
+     * @return array{url: string, id: string}
+     * @throws ValidationException
+     */
+    public function uploadVerificationDocument(string $filePath, array $options = []): array
+    {
+        if (empty($filePath)) {
+            throw new ValidationException('File path is required');
+        }
+
+        if (!file_exists($filePath)) {
+            throw new ValidationException('File not found: ' . $filePath);
+        }
+
+        $multipart = [
+            [
+                'name' => 'file',
+                'contents' => fopen($filePath, 'r'),
+                'filename' => basename($filePath),
+            ],
+        ];
+
+        if (isset($options['workspaceId'])) {
+            $multipart[] = [
+                'name' => 'workspaceId',
+                'contents' => $options['workspaceId'],
+            ];
+        }
+
+        if (isset($options['verificationId'])) {
+            $multipart[] = [
+                'name' => 'verificationId',
+                'contents' => $options['verificationId'],
+            ];
+        }
+
+        return $this->client->postMultipart('/enterprise/verification-document/upload', $multipart);
+    }
 }
