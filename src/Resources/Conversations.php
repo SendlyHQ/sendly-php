@@ -208,4 +208,26 @@ class Conversations
 
         return $this->client->delete("/conversations/{$id}/labels/{$labelId}");
     }
+
+    /**
+     * Get conversation context for AI/LLM consumption
+     *
+     * @param string $id Conversation ID
+     * @param int|null $maxMessages Maximum number of messages to include
+     * @return array{context: string, conversation: array<string, mixed>, tokenEstimate: int, business?: array<string, mixed>}
+     * @throws ValidationException If ID is empty
+     */
+    public function getContext(string $id, ?int $maxMessages = null): array
+    {
+        if (empty($id)) {
+            throw new ValidationException('Conversation ID is required');
+        }
+
+        $params = [];
+        if ($maxMessages !== null) {
+            $params['max_messages'] = $maxMessages;
+        }
+
+        return $this->client->get("/conversations/{$id}/context", $params);
+    }
 }

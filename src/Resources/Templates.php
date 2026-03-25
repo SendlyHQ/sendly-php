@@ -165,4 +165,27 @@ class Templates
 
         return $this->client->post("/templates/{$id}/clone", $data);
     }
+
+    /**
+     * Generate a template using AI
+     *
+     * @param string $description Description of the template to generate
+     * @param string|null $category Optional category for the template
+     * @return array{name: string, text: string, variables: array<string>, category: string}
+     * @throws ValidationException If description is empty
+     */
+    public function generate(string $description, ?string $category = null): array
+    {
+        if (empty($description)) {
+            throw new ValidationException('Description is required');
+        }
+
+        $payload = ['description' => $description];
+
+        if ($category !== null) {
+            $payload['category'] = $category;
+        }
+
+        return $this->client->post('/templates/generate', $payload);
+    }
 }
