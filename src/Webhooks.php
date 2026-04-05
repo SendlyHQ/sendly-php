@@ -163,6 +163,7 @@ class WebhookMessageData
     public readonly ?array $mediaUrls;
     public readonly ?int $retryCount;
     public readonly ?array $metadata;
+    public readonly ?string $batchId;
 
     public function __construct(object $data)
     {
@@ -184,6 +185,7 @@ class WebhookMessageData
         $this->mediaUrls = isset($data->media_urls) ? (array)$data->media_urls : null;
         $this->retryCount = $data->retry_count ?? null;
         $this->metadata = isset($data->metadata) ? (array)$data->metadata : null;
+        $this->batchId = $data->batch_id ?? null;
     }
 
     /** @deprecated Use $id instead */
