@@ -60,17 +60,21 @@ class Verify
      *
      * @param string $phone Phone number in E.164 format
      * @param array{
-     *   channel?: string,
-     *   codeLength?: int,
-     *   expiresIn?: int,
-     *   maxAttempts?: int,
-     *   templateId?: string,
-     *   profileId?: string,
-     *   appName?: string,
-     *   locale?: string,
-     *   metadata?: array<string, mixed>
+     *   template_id?: string,
+     *   profile_id?: string,
+     *   app_name?: string,
+     *   timeout_secs?: int,
+     *   code_length?: int
      * } $options Additional options
-     * @return array{verification: array<string, mixed>, code?: string}
+     * @return array{
+     *   id: string,
+     *   status: string,
+     *   phone: string,
+     *   expires_at: string,
+     *   sandbox: bool,
+     *   sandbox_code?: string,
+     *   message?: string
+     * }
      */
     public function send(string $phone, array $options = []): array
     {
@@ -82,7 +86,15 @@ class Verify
      * Resend a verification code
      *
      * @param string $id Verification ID
-     * @return array{verification: array<string, mixed>, code?: string}
+     * @return array{
+     *   id: string,
+     *   status: string,
+     *   phone: string,
+     *   expires_at: string,
+     *   sandbox: bool,
+     *   sandbox_code?: string,
+     *   message?: string
+     * }
      */
     public function resend(string $id): array
     {
@@ -94,7 +106,13 @@ class Verify
      *
      * @param string $id Verification ID
      * @param string $code The verification code to check
-     * @return array{valid: bool, status: string, verification?: array<string, mixed>}
+     * @return array{
+     *   id: string,
+     *   status: string,
+     *   phone: string,
+     *   verified_at?: string,
+     *   remaining_attempts?: int
+     * }
      */
     public function check(string $id, string $code): array
     {
@@ -105,7 +123,21 @@ class Verify
      * Get a verification by ID
      *
      * @param string $id Verification ID
-     * @return array<string, mixed>
+     * @return array{
+     *   id: string,
+     *   status: string,
+     *   phone: string,
+     *   delivery_status: string,
+     *   attempts: int,
+     *   max_attempts: int,
+     *   expires_at: string,
+     *   verified_at: ?string,
+     *   created_at: string,
+     *   sandbox: bool,
+     *   app_name?: string,
+     *   template_id?: string,
+     *   profile_id?: string
+     * }
      */
     public function get(string $id): array
     {
@@ -115,8 +147,8 @@ class Verify
     /**
      * List verifications
      *
-     * @param array{limit?: int, status?: string, phone?: string} $options Query options
-     * @return array{verifications: array<array<string, mixed>>, pagination: array<string, mixed>}
+     * @param array{limit?: int, status?: string} $options Query options
+     * @return array{verifications: array<array<string, mixed>>, pagination: array{limit: int, has_more: bool}}
      */
     public function list(array $options = []): array
     {
