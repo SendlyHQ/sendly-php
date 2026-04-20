@@ -129,6 +129,45 @@ class Contacts
     }
 
     /**
+     * Clear the invalid flag on a contact so future campaigns include it again.
+     *
+     * Contacts get auto-flagged as invalid when a send fails with a terminal
+     * bad-number error (landline, invalid number) or when a carrier lookup
+     * reports they can't receive SMS.
+     *
+     * @param string $id Contact ID
+     * @return array<string, mixed> The contact with the flag cleared
+     * @throws ValidationException If ID is empty
+     */
+    public function markValid(string $id): array
+    {
+        if (empty($id)) {
+            throw new ValidationException('Contact ID is required');
+        }
+
+        return $this->client->post("/contacts/{$id}/mark-valid", []);
+    }
+
+    /**
+     * Trigger a background carrier lookup across your contacts.
+     *
+     * Landlines and other non-SMS-capable numbers are auto-excluded from
+     * future campaigns. Runs asynchronously (1-5 min). Results populate
+     * line_type, carrier_name, and invalid_reason on affected contacts.
+     *
+     * @param array{listId?: string, force?: bool} $options
+     * @return array{success: bool, message?: string}
+     */
+    public function checkNumbers(array $options = []): array
+    {
+        $body = [
+            'listId' => $options['listId'] ?? null,
+            'force' => $options['force'] ?? false,
+        ];
+        return $this->client->post('/contacts/lookup', $body);
+    }
+
+    /**
      * Iterate over all contacts with automatic pagination
      *
      * @param array{search?: string, listId?: string, batchSize?: int} $options Query options
