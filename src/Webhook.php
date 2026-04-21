@@ -8,6 +8,29 @@ use DateTimeImmutable;
 use DateTimeInterface;
 
 /**
+ * Source of a list-health event. Frozen enum — new values will be
+ * added in minor SDK versions, never removed.
+ */
+final class ListHealthEventSource
+{
+    public const SEND_FAILURE = 'send_failure';
+    public const CARRIER_LOOKUP = 'carrier_lookup';
+    public const USER_ACTION = 'user_action';
+    public const BULK_MARK_VALID = 'bulk_mark_valid';
+
+    /** @return array<int, string> */
+    public static function values(): array
+    {
+        return [
+            self::SEND_FAILURE,
+            self::CARRIER_LOOKUP,
+            self::USER_ACTION,
+            self::BULK_MARK_VALID,
+        ];
+    }
+}
+
+/**
  * Represents a webhook configuration
  */
 class Webhook
@@ -18,6 +41,10 @@ class Webhook
     public const EVENT_MESSAGE_BOUNCED = 'message.bounced';
     public const EVENT_MESSAGE_RETRYING = 'message.retrying';
     public const EVENT_MESSAGE_RECEIVED = 'message.received';
+    public const EVENT_CONTACT_AUTO_FLAGGED = 'contact.auto_flagged';
+    public const EVENT_CONTACT_MARKED_VALID = 'contact.marked_valid';
+    public const EVENT_CONTACTS_LOOKUP_COMPLETED = 'contacts.lookup_completed';
+    public const EVENT_CONTACTS_BULK_MARKED_VALID = 'contacts.bulk_marked_valid';
 
     public const CIRCUIT_STATE_CLOSED = 'closed';
     public const CIRCUIT_STATE_OPEN = 'open';

@@ -136,7 +136,9 @@ class Contacts
      * reports they can't receive SMS.
      *
      * @param string $id Contact ID
-     * @return array<string, mixed> The contact with the flag cleared
+     * @return array<string, mixed> The contact with the flag cleared. Also
+     *   carries `user_marked_valid_at` — the timestamp future carrier re-checks
+     *   respect so your manual decision survives.
      * @throws ValidationException If ID is empty
      */
     public function markValid(string $id): array
@@ -146,6 +148,36 @@ class Contacts
         }
 
         return $this->client->post("/contacts/{$id}/mark-valid", []);
+    }
+
+    /**
+     * Clear the invalid flag on many contacts at once — the escape hatch for
+     * when auto-flag misclassifies at scale. Pass either an explicit id array
+     * (up to 10,000 per call) OR a listId, not both. Foreign ids silently
+     * no-op via the per-organization filter.
+     *
+     * @param array{ids?: array<int, string>, listId?: string} $options
+     * @return array{cleared: int} Number of contacts whose flag was actually
+     *   cleared. Already-clean contacts and foreign ids don't count.
+     * @throws ValidationException If neither or both of ids/listId are set
+     */
+    public function bulkMarkValid(array $options): array
+    {
+        $hasIds = isset($options['ids']) && count($options['ids']) > 0;
+        $hasListId = isset($options['listId']) && $options['listId'] !== '';
+
+        if (!$hasIds && !$hasListId) {
+            throw new ValidationException("bulkMarkValid requires either 'ids' or 'listId'");
+        }
+        if ($hasIds && $hasListId) {
+            throw new ValidationException("bulkMarkValid accepts 'ids' OR 'listId', not both");
+        }
+
+        $body = $hasIds
+            ? ['ids' => $options['ids']]
+            : ['listId' => $options['listId']];
+
+        return $this->client->post('/contacts/bulk-mark-valid', $body);
     }
 
     /**
