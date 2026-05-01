@@ -191,6 +191,73 @@ class Webhooks
     }
 
     /**
+     * Replay failed or cancelled webhook deliveries from the audit log.
+     *
+     * Use after a customer endpoint has recovered from an outage to re-fire
+     * deliveries we recorded but couldn't deliver. Each replay creates a new
+     * delivery row preserving the original event_id so customers can dedupe.
+     * Rejects with HTTP 409 if the circuit is currently open — call
+     * resetCircuit() first.
+     *
+     * @param string $id Webhook ID
+     * @param array{since?: string, until?: string, event_types?: array<int,string>, statuses?: array<int,string>, limit?: int} $options
+     * @return array Counts of requeued deliveries plus delivery IDs
+     * @throws ValidationException If ID is empty
+     */
+    public function redeliver(string $id, array $options = []): array
+    {
+        if (empty($id)) {
+            throw new ValidationException('Webhook ID is required');
+        }
+
+        $body = array_filter(
+            [
+                'since' => $options['since'] ?? null,
+                'until' => $options['until'] ?? null,
+                'event_types' => $options['event_types'] ?? null,
+                'statuses' => $options['statuses'] ?? null,
+                'limit' => $options['limit'] ?? null,
+            ],
+            static fn ($v) => $v !== null,
+        );
+
+        return $this->client->post("/webhooks/{$id}/redeliver", $body);
+    }
+
+    /**
+     * Backfill missed webhook events from the underlying message log.
+     *
+     * Use when a circuit-breaker outage left events with no audit row (the
+     * case redeliver() cannot recover). Synthesized events have fresh IDs;
+     * clients should dedupe by event.data.object.id (the message ID).
+     * Rejects with HTTP 409 if the circuit is currently open — call
+     * resetCircuit() first.
+     *
+     * @param string $id Webhook ID
+     * @param array{since?: string, until?: string, event_types?: array<int,string>, limit?: int} $options
+     * @return array Counts grouped by event type plus delivery IDs
+     * @throws ValidationException If ID is empty
+     */
+    public function backfill(string $id, array $options = []): array
+    {
+        if (empty($id)) {
+            throw new ValidationException('Webhook ID is required');
+        }
+
+        $body = array_filter(
+            [
+                'since' => $options['since'] ?? null,
+                'until' => $options['until'] ?? null,
+                'event_types' => $options['event_types'] ?? null,
+                'limit' => $options['limit'] ?? null,
+            ],
+            static fn ($v) => $v !== null,
+        );
+
+        return $this->client->post("/webhooks/{$id}/backfill", $body);
+    }
+
+    /**
      * Rotate a webhook's secret
      *
      * @param string $id Webhook ID
