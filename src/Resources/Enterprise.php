@@ -73,8 +73,31 @@ class EnterpriseWorkspaces
     }
 
     /**
+     * Submit (or resubmit) a verification for an enterprise workspace.
+     *
+     * Partial-update friendly (May 2026): for resubmit on an existing
+     * workspace, you only need to send the fields you want to change —
+     * everything else is preserved from the existing record. Hosted page
+     * URLs (/biz/, /opt-in/, /legal/) generated during provision are
+     * auto-preserved.
+     *
+     * For sole proprietors, leave `brn`, `brnType`, `brnCountry` unset —
+     * the server strips them before forwarding to the carrier.
+     *
+     * Accepts an associative array of camelCase fields:
+     *   businessName, doingBusinessAs, website, entityType,
+     *   address: {street, city, state, zip, country},
+     *   contact: {firstName, lastName, email, phone},
+     *   brn, brnType, brnCountry,
+     *   useCase, useCaseSummary, sampleMessages, optInWorkflow,
+     *   optInImageUrls, monthlyVolume, additionalInformation,
+     *   ageGatedContent (bool), isvReseller, privacyUrl, termsUrl
+     *
+     * Null values are filtered out before sending so partial updates work
+     * cleanly.
+     *
      * @param string $workspaceId
-     * @param array{businessName: string, businessType: string, ein: string, address: string, city: string, state: string, zip: string, useCase: string, sampleMessages: array<string>, monthlyVolume?: int} $data
+     * @param array<string, mixed> $data
      * @return array<string, mixed>
      * @throws ValidationException
      */
@@ -84,23 +107,33 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspace ID is required');
         }
 
-        $payload = [
-            'business_name' => $data['businessName'],
-            'business_type' => $data['businessType'],
-            'ein' => $data['ein'],
-            'address' => $data['address'],
-            'city' => $data['city'],
-            'state' => $data['state'],
-            'zip' => $data['zip'],
-            'use_case' => $data['useCase'],
-            'sample_messages' => $data['sampleMessages'],
-        ];
-
-        if (isset($data['monthlyVolume'])) {
-            $payload['monthly_volume'] = $data['monthlyVolume'];
+        $payload = [];
+        foreach ($data as $key => $value) {
+            if ($value !== null) {
+                $payload[$key] = $value;
+            }
         }
 
         return $this->client->post("/enterprise/workspaces/{$workspaceId}/verification/submit", $payload);
+    }
+
+    /**
+     * Convenience alias for resubmits. Identical to submitVerification but
+     * reads more naturally when you only want to update a few fields after
+     * a rejection.
+     *
+     *   $sendly->enterprise->workspaces->resubmitVerification($workspaceId, [
+     *       'contact' => ['email' => 'new@email.com'],
+     *   ]);
+     *
+     * @param string $workspaceId
+     * @param array<string, mixed> $partialUpdates
+     * @return array<string, mixed>
+     * @throws ValidationException
+     */
+    public function resubmitVerification(string $workspaceId, array $partialUpdates): array
+    {
+        return $this->submitVerification($workspaceId, $partialUpdates);
     }
 
     /**
