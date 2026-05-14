@@ -23,18 +23,51 @@ class Messages
     }
 
     /**
-     * Send an SMS or MMS message
+     * Send an SMS or MMS message.
      *
-     * @param string $to Recipient phone number in E.164 format
-     * @param string $text Message content (max 1600 characters)
-     * @param string|null $messageType Message type: 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
-     * @param array<string, mixed>|null $metadata Custom JSON metadata to attach to the message (max 4KB)
-     * @param array<string>|null $mediaUrls Array of media URLs to attach (sends as MMS)
+     * Two calling conventions are supported:
+     *
+     *   Positional (PHP-idiomatic):
+     *     $client->messages->send('+1...', 'hello');
+     *     $client->messages->send('+1...', 'hello', 'transactional');
+     *
+     *   Array of options (matches our Node/Python/Ruby SDKs and our
+     *   published code examples):
+     *     $client->messages->send([
+     *         'to' => '+1...',
+     *         'text' => 'hello',
+     *         'messageType' => 'transactional',
+     *         'metadata' => [...],
+     *         'mediaUrls' => [...],
+     *     ]);
+     *
+     * @param string|array<string, mixed> $to Recipient phone number in E.164 format, OR an options array as above
+     * @param string|null $text Message content (max 1600 characters). Required when $to is a string.
+     * @param string|null $messageType 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
+     * @param array<string, mixed>|null $metadata Custom JSON metadata (max 4KB)
+     * @param array<string>|null $mediaUrls Media URLs to attach (sends as MMS)
      * @return Message The sent message
      * @throws ValidationException If parameters are invalid
      */
-    public function send(string $to, string $text, ?string $messageType = null, ?array $metadata = null, ?array $mediaUrls = null): Message
+    public function send(string|array $to, ?string $text = null, ?string $messageType = null, ?array $metadata = null, ?array $mediaUrls = null): Message
     {
+        // Array-style call: extract keys and delegate to positional form
+        // so all validation + payload assembly stays in one place.
+        if (is_array($to)) {
+            $options = $to;
+            return $this->send(
+                (string) ($options['to'] ?? ''),
+                isset($options['text']) ? (string) $options['text'] : null,
+                isset($options['messageType']) ? (string) $options['messageType'] : null,
+                $options['metadata'] ?? null,
+                $options['mediaUrls'] ?? null,
+            );
+        }
+
+        if ($text === null) {
+            throw new ValidationException('text is required');
+        }
+
         $this->validatePhone($to);
         $this->validateText($text);
         $this->validateMessageType($messageType);

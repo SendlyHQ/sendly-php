@@ -1,5 +1,39 @@
 # sendly/sendly-php
 
+## 3.31.0
+
+### Patch Changes
+
+- **Resource accessors are now public properties (backward-compatible).** Idiomatic PHP usage matches our Node/Python/Ruby SDKs and our published docs:
+
+  ```php
+  $client->messages->send('+1...', 'hello');
+  $client->labels->create(...);
+  $client->enterprise->workspaces->create(...);
+  ```
+
+  The legacy method-style accessors (`$client->messages()`, `$client->webhooks()`, …) continue to work unchanged, so existing v1.0.5 code keeps running on upgrade.
+
+- **`Messages::send()` now accepts an options array** in addition to its existing positional signature. Both calling conventions produce the same result:
+
+  ```php
+  // Positional (existing)
+  $client->messages->send('+1...', 'hello', 'transactional');
+
+  // Array of options (new — matches our Node/Python/Ruby SDKs)
+  $client->messages->send([
+      'to' => '+1...',
+      'text' => 'hello',
+      'messageType' => 'transactional',
+  ]);
+  ```
+
+- **README fix:** the Enterprise "Quick Provision" example incorrectly referenced `Sendly\Client` (which does not exist). Corrected to `use Sendly\Sendly;` + `new Sendly(...)`.
+
+### Why this release
+
+A customer hit fatal `Cannot access private property` errors copy-pasting code from our docs because the docs assumed property access (the idiom of our other SDKs) while the PHP SDK exposed only method accessors. Making the properties public and accepting an array on `send()` reconciles the SDK with our docs without breaking existing PHP-style consumers.
+
 ## 3.30.0
 
 ### Minor Changes

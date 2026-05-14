@@ -37,7 +37,7 @@ use Sendly\Exceptions\NetworkException;
  */
 class Sendly
 {
-    public const VERSION = '1.0.5';
+    public const VERSION = '1.0.6';
     public const DEFAULT_BASE_URL = 'https://sendly.live/api/v1';
     public const DEFAULT_TIMEOUT = 30;
 
@@ -47,19 +47,25 @@ class Sendly
     private int $maxRetries;
     private string $organizationId;
     private GuzzleClient $httpClient;
-    private Messages $messages;
-    private Webhooks $webhooks;
-    private Account $account;
-    private Verify $verify;
-    private Templates $templates;
-    private Campaigns $campaigns;
-    private Contacts $contacts;
-    private Media $media;
-    private Enterprise $enterprise;
-    private Conversations $conversations;
-    private Labels $labels;
-    private Drafts $drafts;
-    private Rules $rules;
+
+    // Resource properties exposed as public so users can access them
+    // directly (e.g. $client->messages->send(...)) matching the idiom of
+    // our Node/Python/Ruby SDKs and our published documentation. The
+    // legacy method-style accessors below (messages(), webhooks(), …) are
+    // retained so existing v1.0.5 consumers continue to work unchanged.
+    public Messages $messages;
+    public Webhooks $webhooks;
+    public Account $account;
+    public Verify $verify;
+    public Templates $templates;
+    public Campaigns $campaigns;
+    public Contacts $contacts;
+    public Media $media;
+    public Enterprise $enterprise;
+    public Conversations $conversations;
+    public Labels $labels;
+    public Drafts $drafts;
+    public Rules $rules;
 
     /**
      * Create a new Sendly client

@@ -393,7 +393,9 @@ The Enterprise API lets you programmatically manage workspaces, verification, cr
 Create a fully configured workspace in a single call:
 
 ```php
-$client = new Sendly\Client('sk_live_v1_master_YOUR_KEY');
+use Sendly\Sendly;
+
+$client = new Sendly('sk_live_v1_master_YOUR_KEY');
 
 $result = $client->enterprise->provision([
     'name' => 'Acme Insurance - Austin',

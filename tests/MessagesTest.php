@@ -557,4 +557,66 @@ class MessagesTest extends TestCase
 
         $this->assertCount(0, $messages);
     }
+
+    // ==================== v1.0.6: array-style send + public property access ====================
+
+    public function testSendAcceptsOptionsArray(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode([
+                'message' => [
+                    'id' => 'msg_array',
+                    'to' => '+15551234567',
+                    'text' => 'array style',
+                    'status' => 'queued',
+                    'credits_used' => 1,
+                    'created_at' => '2024-01-01T12:00:00Z',
+                    'updated_at' => '2024-01-01T12:00:00Z',
+                ],
+            ])),
+        ]);
+
+        $message = $client->messages()->send([
+            'to' => '+15551234567',
+            'text' => 'array style',
+            'messageType' => 'transactional',
+        ]);
+
+        $this->assertSame('msg_array', $message->id);
+        $this->assertSame('array style', $message->text);
+    }
+
+    public function testSendArrayStyleRequiresText(): void
+    {
+        $client = new Sendly('test_api_key');
+        $this->expectException(ValidationException::class);
+        $client->messages()->send(['to' => '+15551234567']);
+    }
+
+    public function testResourcePropertiesArePublicallyAccessible(): void
+    {
+        $client = new Sendly('test_api_key');
+        // Public property access — matches our Node/Python/Ruby SDK
+        // idiom and the code samples shipped in our docs.
+        $this->assertInstanceOf(\Sendly\Resources\Messages::class, $client->messages);
+        $this->assertInstanceOf(\Sendly\Resources\Webhooks::class, $client->webhooks);
+        $this->assertInstanceOf(\Sendly\Resources\Account::class, $client->account);
+        $this->assertInstanceOf(\Sendly\Resources\Verify::class, $client->verify);
+        $this->assertInstanceOf(\Sendly\Resources\Campaigns::class, $client->campaigns);
+        $this->assertInstanceOf(\Sendly\Resources\Contacts::class, $client->contacts);
+        $this->assertInstanceOf(\Sendly\Resources\Enterprise::class, $client->enterprise);
+        $this->assertInstanceOf(\Sendly\Resources\Conversations::class, $client->conversations);
+        $this->assertInstanceOf(\Sendly\Resources\Labels::class, $client->labels);
+        $this->assertInstanceOf(\Sendly\Resources\Drafts::class, $client->drafts);
+        $this->assertInstanceOf(\Sendly\Resources\Rules::class, $client->rules);
+    }
+
+    public function testMethodAccessorsStillWorkForBackwardCompat(): void
+    {
+        $client = new Sendly('test_api_key');
+        // Legacy method-style access — must keep working so v1.0.5
+        // consumers don't break on upgrade.
+        $this->assertInstanceOf(\Sendly\Resources\Messages::class, $client->messages());
+        $this->assertSame($client->messages, $client->messages());
+    }
 }
