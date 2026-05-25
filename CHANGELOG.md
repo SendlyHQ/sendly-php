@@ -1,5 +1,46 @@
 # sendly/sendly-php
 
+## 3.32.0
+
+### Minor Changes
+
+- **New `BusinessUpgrade` resource** (`$client->businessUpgrade`) — port of the Node SDK resource for the toll-free entity-upgrade ("fork-with-new-number") flow. When a customer forms a new legal entity (e.g. an LLC), this resource reserves a new toll-free number under the new entity, submits it for carrier review, and atomically swaps to it on approval — without disrupting outbound SMS during the 1-2 week review window.
+
+  ```php
+  // Preview validation before submitting (no writes).
+  $preview = $client->businessUpgrade->preflight([
+      'businessName' => 'Acme Holdings LLC',
+      'brn'          => '12-3456789',
+      'brnType'      => 'EIN',
+      'brnCountry'   => 'US',
+      'entityType'   => 'PRIVATE_PROFIT',
+  ]);
+
+  // Submit the upgrade with the IRS letter.
+  $result = $client->businessUpgrade->start('ws_abc', [
+      'businessName' => 'Acme Holdings LLC',
+      'brn'          => '12-3456789',
+      'brnType'      => 'EIN',
+      'brnCountry'   => 'US',
+      'entityType'   => 'PRIVATE_PROFIT',
+  ], [
+      'einDocPath' => __DIR__ . '/CP-575.pdf',
+  ]);
+
+  // Check status, cancel, resubmit, or set old-number disposition.
+  $client->businessUpgrade->status('ws_abc');
+  $client->businessUpgrade->cancel('ws_abc');
+  $client->businessUpgrade->resubmit('ws_abc', ['website' => 'https://acme.com']);
+  $client->businessUpgrade->setDisposition('ws_abc', [
+      'disposition'       => 'moved',
+      'targetWorkspaceId' => 'ws_xyz',
+  ]);
+  ```
+
+  The EIN doc is uploaded as a multipart `einDoc` field via Guzzle's `multipart` request option. Pass either `einDocPath` (file path) or `einDocContents` (raw bytes / opened stream + `einDocFilename`).
+
+- **`VERSION` constant updated to `3.32.0`** — previously the constant was stale (`1.0.6`) while Composer reported `3.31.0`. The two are now aligned, so `Sendly::VERSION` matches the published package version.
+
 ## 3.31.0
 
 ### Patch Changes

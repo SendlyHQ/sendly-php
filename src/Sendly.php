@@ -20,6 +20,7 @@ use Sendly\Resources\Conversations;
 use Sendly\Resources\Labels;
 use Sendly\Resources\Drafts;
 use Sendly\Resources\Rules;
+use Sendly\Resources\BusinessUpgrade;
 use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\AuthenticationException;
 use Sendly\Exceptions\RateLimitException;
@@ -37,7 +38,7 @@ use Sendly\Exceptions\NetworkException;
  */
 class Sendly
 {
-    public const VERSION = '1.0.6';
+    public const VERSION = '3.32.0';
     public const DEFAULT_BASE_URL = 'https://sendly.live/api/v1';
     public const DEFAULT_TIMEOUT = 30;
 
@@ -66,6 +67,7 @@ class Sendly
     public Labels $labels;
     public Drafts $drafts;
     public Rules $rules;
+    public BusinessUpgrade $businessUpgrade;
 
     /**
      * Create a new Sendly client
@@ -100,6 +102,7 @@ class Sendly
         $this->labels = new Labels($this);
         $this->drafts = new Drafts($this);
         $this->rules = new Rules($this);
+        $this->businessUpgrade = new BusinessUpgrade($this);
     }
 
     /**
@@ -230,6 +233,16 @@ class Sendly
     public function rules(): Rules
     {
         return $this->rules;
+    }
+
+    /**
+     * Get the BusinessUpgrade resource
+     *
+     * @return BusinessUpgrade
+     */
+    public function businessUpgrade(): BusinessUpgrade
+    {
+        return $this->businessUpgrade;
     }
 
     public function setOrganizationId(string $id): void
