@@ -181,6 +181,35 @@ class Contacts
     }
 
     /**
+     * Bulk-import contacts. Pass an array of contact items, each with at least
+     * a `phone` (E.164). Optional per-item `name`, `email`, and `optedInAt`.
+     * Optionally add every imported contact to a list via `listId`, and set a
+     * batch-wide opt-in timestamp via `optedInAt`.
+     *
+     * @param array<int, array{phone: string, name?: string, email?: string, optedInAt?: string}> $contacts
+     * @param array{listId?: string, optedInAt?: string} $options
+     * @return array{imported: int, skippedDuplicates: int, errors: array<int, array{index: int, phone: string, error: string}>, totalErrors: int}
+     * @throws ValidationException If the contacts array is empty
+     */
+    public function import(array $contacts, array $options = []): array
+    {
+        if (count($contacts) === 0) {
+            throw new ValidationException('contacts array is required');
+        }
+
+        $body = ['contacts' => $contacts];
+
+        if (isset($options['listId'])) {
+            $body['listId'] = $options['listId'];
+        }
+        if (isset($options['optedInAt'])) {
+            $body['optedInAt'] = $options['optedInAt'];
+        }
+
+        return $this->client->post('/contacts/import', $body);
+    }
+
+    /**
      * Trigger a background carrier lookup across your contacts.
      *
      * Landlines and other non-SMS-capable numbers are auto-excluded from

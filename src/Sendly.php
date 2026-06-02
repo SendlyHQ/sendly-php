@@ -38,7 +38,7 @@ use Sendly\Exceptions\NetworkException;
  */
 class Sendly
 {
-    public const VERSION = '3.32.0';
+    public const VERSION = '3.33.0';
     public const DEFAULT_BASE_URL = 'https://sendly.live/api/v1';
     public const DEFAULT_TIMEOUT = 30;
 

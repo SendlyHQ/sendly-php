@@ -230,4 +230,20 @@ class Conversations
 
         return $this->client->get("/conversations/{$id}/context", $params);
     }
+
+    /**
+     * Generate AI-suggested replies for a conversation
+     *
+     * @param string $id Conversation ID
+     * @return array{suggestions: array<array<string, mixed>>, basedOnMessageId?: string, model?: string}
+     * @throws ValidationException If ID is empty
+     */
+    public function suggestReplies(string $id): array
+    {
+        if (empty($id)) {
+            throw new ValidationException('Conversation ID is required');
+        }
+
+        return $this->client->post("/conversations/{$id}/suggest-replies");
+    }
 }

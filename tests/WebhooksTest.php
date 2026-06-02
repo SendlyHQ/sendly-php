@@ -127,11 +127,11 @@ class WebhooksTest extends TestCase
         $this->assertInstanceOf(WebhookEvent::class, $event);
         $this->assertSame('evt_123', $event->id);
         $this->assertSame('message.delivered', $event->type);
-        $this->assertSame('2024-01-01T12:00:00Z', $event->createdAt);
+        $this->assertSame('2024-01-01T12:00:00Z', $event->created);
         $this->assertSame('2024-01-01', $event->apiVersion);
 
         // Check data
-        $this->assertSame('msg_123', $event->data->messageId);
+        $this->assertSame('msg_123', $event->data->id);
         $this->assertSame('delivered', $event->data->status);
         $this->assertSame('+15551234567', $event->data->to);
         $this->assertSame('MyBrand', $event->data->from);
@@ -163,7 +163,7 @@ class WebhooksTest extends TestCase
         $event = Webhooks::parseEvent($payload, $signature, $this->secret);
 
         $this->assertSame('message.failed', $event->type);
-        $this->assertSame('msg_456', $event->data->messageId);
+        $this->assertSame('msg_456', $event->data->id);
         $this->assertSame('failed', $event->data->status);
         $this->assertSame('Invalid destination number', $event->data->error);
         $this->assertSame('INVALID_NUMBER', $event->data->errorCode);
@@ -244,10 +244,11 @@ class WebhooksTest extends TestCase
         ]);
         $signature = Webhooks::generateSignature($payload, $this->secret);
 
-        $this->expectException(WebhookSignatureException::class);
-        $this->expectExceptionMessage('Invalid event structure');
+        // created_at is no longer required; only id, type, and data are.
+        $event = Webhooks::parseEvent($payload, $signature, $this->secret);
 
-        Webhooks::parseEvent($payload, $signature, $this->secret);
+        $this->assertSame('evt_123', $event->id);
+        $this->assertSame(0, $event->created);
     }
 
     public function testParseEventWithInvalidJson(): void
@@ -273,7 +274,7 @@ class WebhooksTest extends TestCase
 
         $event = Webhooks::parseEvent($payload, $signature, $this->secret);
 
-        $this->assertSame('2024-01-01', $event->apiVersion); // default value
+        $this->assertSame('2024-01', $event->apiVersion); // default value
     }
 
     public function testParseEventWithOptionalFields(): void

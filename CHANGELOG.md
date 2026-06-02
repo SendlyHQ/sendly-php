@@ -1,5 +1,31 @@
 # sendly/sendly-php
 
+## 3.33.0
+
+### Minor Changes
+
+- **`Contacts::import()`** (`$client->contacts->import(...)`) — bulk-import contacts in one call, mirroring the Node SDK's `contacts.import()` and the Ruby SDK's `import_contacts`. Pass an array of contact items (each with at least a `phone` in E.164) plus optional `listId` and batch-wide `optedInAt`:
+
+  ```php
+  $result = $client->contacts->import([
+      ['phone' => '+15551234567', 'name' => 'Jane Doe', 'email' => 'jane@example.com'],
+      ['phone' => '+15559876543', 'optedInAt' => '2024-01-01T12:00:00Z'],
+  ], [
+      'listId'    => 'lst_abc',
+      'optedInAt' => '2024-01-01T00:00:00Z',
+  ]);
+  // ['imported' => 2, 'skippedDuplicates' => 0, 'errors' => [], 'totalErrors' => 0]
+  ```
+
+- **`Conversations::suggestReplies()`** (`$client->conversations->suggestReplies($id)`) — generate AI-suggested replies for a conversation, mirroring the Node SDK's `conversations.suggestReplies()`:
+
+  ```php
+  $result = $client->conversations->suggestReplies('cnv_abc');
+  foreach ($result['suggestions'] as $s) {
+      echo $s['text'] . PHP_EOL;
+  }
+  ```
+
 ## 3.32.0
 
 ### Minor Changes
