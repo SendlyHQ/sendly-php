@@ -93,7 +93,14 @@ class Numbers
     /**
      * List the phone numbers on your account.
      *
-     * @return array{numbers: array<array{id: string, phoneNumber: string, status: string, source: string, countryCode: string, phoneNumberType: string, monthlyCostCents: int}>}
+     * `requirementsSubmittedAt` is an ISO-8601 timestamp string, or null when
+     * the number still needs regulatory documents; a value means documents
+     * were submitted and are under carrier review. `pendingCancellation` is
+     * true when the number is scheduled for release at period end, and
+     * `scheduledReleaseAt` is the ISO-8601 timestamp string of that release
+     * (null when not scheduled).
+     *
+     * @return array{numbers: array<array{id: string, phoneNumber: string, status: string, source: string, countryCode: string, phoneNumberType: string, monthlyCostCents: int, requirementsSubmittedAt: ?string, pendingCancellation: bool, scheduledReleaseAt: ?string}>}
      */
     public function list(): array
     {
