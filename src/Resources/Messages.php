@@ -46,10 +46,11 @@ class Messages
      * @param string|null $messageType 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
      * @param array<string, mixed>|null $metadata Custom JSON metadata (max 4KB)
      * @param array<string>|null $mediaUrls Media URLs to attach (sends as MMS)
+     * @param string|null $from Sender ID or phone number (optional)
      * @return Message The sent message
      * @throws ValidationException If parameters are invalid
      */
-    public function send(string|array $to, ?string $text = null, ?string $messageType = null, ?array $metadata = null, ?array $mediaUrls = null): Message
+    public function send(string|array $to, ?string $text = null, ?string $messageType = null, ?array $metadata = null, ?array $mediaUrls = null, ?string $from = null): Message
     {
         // Array-style call: extract keys and delegate to positional form
         // so all validation + payload assembly stays in one place.
@@ -61,6 +62,7 @@ class Messages
                 isset($options['messageType']) ? (string) $options['messageType'] : null,
                 $options['metadata'] ?? null,
                 $options['mediaUrls'] ?? null,
+                isset($options['from']) ? (string) $options['from'] : null,
             );
         }
 
@@ -76,6 +78,10 @@ class Messages
             'to' => $to,
             'text' => $text,
         ];
+
+        if ($from !== null) {
+            $payload['from'] = $from;
+        }
 
         if ($messageType !== null) {
             $payload['messageType'] = $messageType;
