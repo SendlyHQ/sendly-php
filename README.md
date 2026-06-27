@@ -101,6 +101,14 @@ $message = $client->messages()->send(
     ['order_id' => '12345', 'customer_id' => 'cust_abc']
 );
 
+// Send from one of your owned numbers (or an alphanumeric sender ID).
+// Omit `from` to use your default sender.
+$message = $client->messages()->send([
+    'to' => '+15551234567',
+    'text' => 'Hello from our team!',
+    'from' => '+447111111111',
+]);
+
 echo $message->id;
 echo $message->status;
 echo $message->creditsUsed;
