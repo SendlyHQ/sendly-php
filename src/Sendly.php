@@ -22,6 +22,7 @@ use Sendly\Resources\Drafts;
 use Sendly\Resources\Rules;
 use Sendly\Resources\BusinessUpgrade;
 use Sendly\Resources\Numbers;
+use Sendly\Resources\TenDlc;
 use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\AuthenticationException;
 use Sendly\Exceptions\RateLimitException;
@@ -70,6 +71,7 @@ class Sendly
     public Rules $rules;
     public BusinessUpgrade $businessUpgrade;
     public Numbers $numbers;
+    public TenDlc $tenDlc;
 
     /**
      * Create a new Sendly client
@@ -106,6 +108,7 @@ class Sendly
         $this->rules = new Rules($this);
         $this->businessUpgrade = new BusinessUpgrade($this);
         $this->numbers = new Numbers($this);
+        $this->tenDlc = new TenDlc($this);
     }
 
     /**
@@ -256,6 +259,16 @@ class Sendly
     public function numbers(): Numbers
     {
         return $this->numbers;
+    }
+
+    /**
+     * Get the TenDlc resource
+     *
+     * @return TenDlc
+     */
+    public function tenDlc(): TenDlc
+    {
+        return $this->tenDlc;
     }
 
     public function setOrganizationId(string $id): void
