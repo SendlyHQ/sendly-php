@@ -163,4 +163,91 @@ class Numbers
 
         return $this->client->post('/numbers/buy', $body);
     }
+
+    /**
+     * Get a single phone number on your account by its id.
+     *
+     * Returns the same fields as {@see list()} plus `isDefault` (whether this
+     * number is the workspace's default sender). See {@see list()} for the
+     * meaning of `requirementsSubmittedAt`, `pendingCancellation`, and
+     * `scheduledReleaseAt`.
+     *
+     * @param string $id The number's id.
+     * @return array{id: string, phoneNumber: string, status: string, source: string, countryCode: string, phoneNumberType: string, monthlyCostCents: int, isDefault: bool, requirementsSubmittedAt: ?string, pendingCancellation: bool, scheduledReleaseAt: ?string}
+     * @throws ValidationException If `$id` is empty.
+     */
+    public function get(string $id): array
+    {
+        if (empty($id)) {
+            throw new ValidationException('Number id is required');
+        }
+
+        return $this->client->get('/numbers/' . rawurlencode($id));
+    }
+
+    /**
+     * Update a phone number on your account.
+     *
+     * Only two mutations are supported, and at least one must be provided:
+     *
+     *   - `isDefault: true`          — make this the workspace's default sender
+     *                                  (the prior default is cleared atomically).
+     *                                  The number must be `active`.
+     *   - `pendingCancellation: false` — "keep this number": undo a scheduled
+     *                                  period-end release.
+     *
+     * Returns the full number (same shape as {@see get()}).
+     *
+     * @param string $id The number's id.
+     * @param array{isDefault?: bool, pendingCancellation?: bool} $options The
+     *   mutation(s) to apply. At least one of `isDefault` or
+     *   `pendingCancellation` is required.
+     * @return array{id: string, phoneNumber: string, status: string, source: string, countryCode: string, phoneNumberType: string, monthlyCostCents: int, isDefault: bool, requirementsSubmittedAt: ?string, pendingCancellation: bool, scheduledReleaseAt: ?string}
+     * @throws ValidationException If `$id` is empty or no supported field is given.
+     */
+    public function update(string $id, array $options): array
+    {
+        if (empty($id)) {
+            throw new ValidationException('Number id is required');
+        }
+
+        $body = [];
+        if (array_key_exists('isDefault', $options)) {
+            $body['isDefault'] = $options['isDefault'];
+        }
+        if (array_key_exists('pendingCancellation', $options)) {
+            $body['pendingCancellation'] = $options['pendingCancellation'];
+        }
+        if ($body === []) {
+            throw new ValidationException('Provide \'isDefault\' or \'pendingCancellation\'');
+        }
+
+        return $this->client->patch('/numbers/' . rawurlencode($id), $body);
+    }
+
+    /**
+     * Release a phone number, or schedule its release for period end.
+     *
+     * A live, paid purchase is cancelled at period end (you keep it until then);
+     * anything else is released at the carrier immediately. The response tells
+     * you which happened:
+     *
+     *   - immediate:  `{ success: true }`
+     *   - scheduled:  `{ success: true, scheduled: true, scheduledReleaseAt: <ISO-8601> }`
+     *
+     * Undo a scheduled release with {@see update()} and
+     * `['pendingCancellation' => false]`.
+     *
+     * @param string $id The number's id.
+     * @return array{success: bool, scheduled?: bool, scheduledReleaseAt?: string}
+     * @throws ValidationException If `$id` is empty.
+     */
+    public function release(string $id): array
+    {
+        if (empty($id)) {
+            throw new ValidationException('Number id is required');
+        }
+
+        return $this->client->delete('/numbers/' . rawurlencode($id));
+    }
 }

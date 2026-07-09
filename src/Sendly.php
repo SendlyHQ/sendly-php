@@ -23,6 +23,7 @@ use Sendly\Resources\Rules;
 use Sendly\Resources\BusinessUpgrade;
 use Sendly\Resources\Numbers;
 use Sendly\Resources\TenDlc;
+use Sendly\Resources\Links;
 use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\AuthenticationException;
 use Sendly\Exceptions\RateLimitException;
@@ -40,7 +41,7 @@ use Sendly\Exceptions\NetworkException;
  */
 class Sendly
 {
-    public const VERSION = '3.33.0';
+    public const VERSION = '3.36.0';
     public const DEFAULT_BASE_URL = 'https://sendly.live/api/v1';
     public const DEFAULT_TIMEOUT = 30;
 
@@ -72,6 +73,7 @@ class Sendly
     public BusinessUpgrade $businessUpgrade;
     public Numbers $numbers;
     public TenDlc $tenDlc;
+    public Links $links;
 
     /**
      * Create a new Sendly client
@@ -109,6 +111,7 @@ class Sendly
         $this->businessUpgrade = new BusinessUpgrade($this);
         $this->numbers = new Numbers($this);
         $this->tenDlc = new TenDlc($this);
+        $this->links = new Links($this);
     }
 
     /**
@@ -269,6 +272,26 @@ class Sendly
     public function tenDlc(): TenDlc
     {
         return $this->tenDlc;
+    }
+
+    /**
+     * Get the Links resource
+     *
+     * @return Links
+     */
+    public function links(): Links
+    {
+        return $this->links;
+    }
+
+    /**
+     * Get the configured API base URL (e.g. https://sendly.live/api/v1)
+     *
+     * @return string
+     */
+    public function getBaseUrl(): string
+    {
+        return $this->baseUrl;
     }
 
     public function setOrganizationId(string $id): void

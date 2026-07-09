@@ -102,6 +102,106 @@ class Messages
     }
 
     /**
+     * Send a group MMS to 2-8 recipients (US/Canada only).
+     *
+     * Creates a multi-party MMS conversation: every recipient sees the others
+     * and replies fan out to all participants. Group messaging is an A2P
+     * 10DLC capability — the sending number must be an MMS-enabled,
+     * 10DLC-registered number you own. Omit `from` to use your workspace's
+     * default sender. Requires the `group_mms` (and, for media, `enable_mms`)
+     * feature to be enabled for your account.
+     *
+     *   $client->messages->sendGroup([
+     *       'to' => ['+14155551234', '+14155555678'],
+     *       'text' => 'Hey team - quick sync at noon?',
+     *   ]);
+     *
+     * @param array{to: array<string>, text?: string, from?: string, mediaUrls?: array<string>, messageType?: string} $options
+     *   Group message options. `to` (2-8 US/CA recipients) is required, plus
+     *   at least one of `text` or `mediaUrls`. `mediaUrls` may also be given
+     *   as `media_urls`.
+     * @return array<string, mixed> The group message (id, status, to, group_message_id, simulated)
+     * @throws ValidationException If recipient count is out of range or no body is provided
+     */
+    public function sendGroup(array $options): array
+    {
+        $to = $options['to'] ?? [];
+        if (!is_array($to) || count($to) < 2) {
+            throw new ValidationException('Group messaging requires at least 2 recipients in \'to\'');
+        }
+        if (count($to) > 8) {
+            throw new ValidationException('Group messaging supports at most 8 recipients');
+        }
+
+        foreach ($to as $recipient) {
+            $this->validatePhone((string) $recipient);
+        }
+
+        $text = isset($options['text']) ? (string) $options['text'] : null;
+        $mediaUrls = $options['mediaUrls'] ?? $options['media_urls'] ?? null;
+        $from = isset($options['from']) ? (string) $options['from'] : null;
+        $messageType = isset($options['messageType']) ? (string) $options['messageType'] : null;
+
+        $hasMedia = is_array($mediaUrls) && count($mediaUrls) > 0;
+        if (($text === null || $text === '') && !$hasMedia) {
+            throw new ValidationException('Provide \'text\' or \'mediaUrls\'');
+        }
+
+        if ($text !== null) {
+            $this->validateText($text);
+        }
+        $this->validateMessageType($messageType);
+
+        $payload = ['to' => array_values($to)];
+        if ($text !== null && $text !== '') {
+            $payload['text'] = $text;
+        }
+        if ($from !== null) {
+            $payload['from'] = $from;
+        }
+        if ($hasMedia) {
+            $payload['mediaUrls'] = $mediaUrls;
+        }
+        if ($messageType !== null) {
+            $payload['messageType'] = $messageType;
+        }
+
+        return $this->client->post('/messages/group', $payload);
+    }
+
+    /**
+     * AI-enhance a draft message for clarity, compliance, and send-readiness.
+     *
+     * Rewrites the supplied text into a single, polished SMS segment (max 160
+     * characters) and returns a short explanation of what changed. Pass
+     * $messageType to steer the rewrite; with no $text it generates a suitable
+     * message for that type instead. At least one of $text or $messageType is
+     * required. Requires the `ai_classification` feature; when AI is
+     * unavailable the original text is returned with an empty explanation.
+     *
+     * @param string|null $text Draft text to enhance
+     * @param string|null $messageType 'marketing' or 'transactional' to steer the rewrite
+     * @return array<string, mixed> The enhanced text, an explanation, and the model used
+     * @throws ValidationException If neither $text nor $messageType is provided
+     */
+    public function enhance(?string $text = null, ?string $messageType = null): array
+    {
+        if (($text === null || $text === '') && ($messageType === null || $messageType === '')) {
+            throw new ValidationException('Provide \'text\' or \'messageType\'');
+        }
+
+        $payload = [];
+        if ($text !== null) {
+            $payload['text'] = $text;
+        }
+        if ($messageType !== null && $messageType !== '') {
+            $payload['messageType'] = $messageType;
+        }
+
+        return $this->client->post('/ai/enhance', $payload);
+    }
+
+    /**
      * List messages
      *
      * @param array{limit?: int, offset?: int, status?: string, to?: string} $options Query options

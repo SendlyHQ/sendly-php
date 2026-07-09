@@ -115,6 +115,40 @@ class Account
     }
 
     /**
+     * Rotate an API key, minting a replacement while keeping the old key valid
+     * for a grace period so you can roll callers over without downtime.
+     *
+     * The returned `newKey.key` is the raw `sk_…` secret and is shown only once —
+     * store it securely. The old key keeps working until `gracePeriodHours`
+     * elapse, then expires automatically.
+     *
+     * @param string $id API key ID to rotate
+     * @param array{gracePeriodHours?: int} $options Rotation options.
+     *   `gracePeriodHours` is 24-168 inclusive (default 24).
+     * @return array{
+     *   newKey: array<string, mixed>,
+     *   oldKey: array<string, mixed>,
+     *   message: string
+     * } The new key (including the one-time raw `key` and a `warning`), the old
+     *   key, and a human-readable message. Returned decoded verbatim.
+     * @throws ValidationException If ID is empty, the grace period is out of
+     *   range, or the key cannot be rotated (e.g. already rotating).
+     */
+    public function rotateApiKey(string $id, array $options = []): array
+    {
+        if (empty($id)) {
+            throw new ValidationException('API key ID is required');
+        }
+
+        $payload = [];
+        if (isset($options['gracePeriodHours'])) {
+            $payload['gracePeriodHours'] = $options['gracePeriodHours'];
+        }
+
+        return $this->client->post("/account/keys/{$id}/rotate", $payload);
+    }
+
+    /**
      * Get a specific API key by ID
      *
      * @param string $id API key ID

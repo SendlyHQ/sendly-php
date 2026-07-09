@@ -219,6 +219,109 @@ foreach ($client->messages()->each(['status' => 'delivered']) as $message) {
 }
 ```
 
+### Group MMS
+
+Send one MMS to 2-8 recipients (US/Canada only). Everyone shares a single
+thread and replies fan out to all participants. Group messaging is an A2P
+10DLC capability — the sending number must be an MMS-enabled, 10DLC-registered
+number you own. Requires the `group_mms` feature (and `enable_mms` for media)
+to be enabled for your account.
+
+```php
+$group = $client->messages()->sendGroup([
+    'to' => ['+14155551234', '+14155555678'],
+    'text' => 'Hey team - quick sync at noon?',
+    // 'from' => '+15125550100',           // optional; omit to use your default sender
+    // 'mediaUrls' => ['https://.../a.jpg'], // optional; text or mediaUrls required
+    // 'messageType' => 'transactional',     // default; use 'marketing' for quiet hours
+]);
+
+echo $group['id'];                // "msg_xxx"
+echo $group['status'];            // "sent" (or "delivered" when simulated)
+echo $group['group_message_id'];  // "grp_xxx" (present on live sends)
+```
+
+### AI Message Enhancement
+
+Rewrite a draft into a single, polished SMS segment (≤160 characters) and get a
+short explanation of what changed. Pass `messageType` to steer the rewrite; with
+no `text` it generates a suitable message for that type instead. At least one of
+`text` or `messageType` is required. Requires the `ai_classification` feature;
+when AI is unavailable the original text is returned with an empty explanation.
+
+```php
+$result = $client->messages()->enhance(
+    'hey come check out our sale this weekend',
+    'marketing'
+);
+
+echo $result['enhanced'];     // polished, ≤160-char rewrite
+echo $result['explanation'];  // what changed and why
+echo $result['model'] ?? '';  // model used, when available
+```
+
+## Numbers
+
+List the phone numbers on your account, inspect one, make a number your default
+sender or keep a number scheduled for release, and release a number.
+
+```php
+// List your numbers
+$result = $client->numbers()->list();
+foreach ($result['numbers'] as $n) {
+    echo "{$n['phoneNumber']} — {$n['status']} ({$n['phoneNumberType']})\n";
+}
+
+// Get a single number (includes `isDefault`)
+$number = $client->numbers()->get('num_abc123');
+echo $number['phoneNumber']; // "+15551234567"
+echo $number['isDefault'] ? 'default sender' : 'not default';
+
+// Make a number your workspace's default sender (must be active)
+$client->numbers()->update('num_abc123', ['isDefault' => true]);
+
+// "Keep this number": undo a scheduled period-end release
+$client->numbers()->update('num_abc123', ['pendingCancellation' => false]);
+
+// Release a number. A live paid purchase is cancelled at period end;
+// anything else is released immediately.
+$result = $client->numbers()->release('num_abc123');
+if ($result['scheduled'] ?? false) {
+    echo "Releases at {$result['scheduledReleaseAt']}";
+} else {
+    echo 'Released';
+}
+```
+
+## Short Links (URL Shortening)
+
+Mint branded short links for a destination URL, list them with click analytics,
+and disable (kill) an individual link. Branded, owned-domain short links improve
+deliverability — carriers filter public shorteners — and give you click data.
+
+> **Note:** URL shortening is gated behind the `url_shortener` rollout flag and
+> is not yet generally available; until the flag is enabled for your account the
+> endpoints read as absent and calls throw `NotFoundException` (HTTP 404).
+
+```php
+// Shorten a URL
+$link = $client->links()->create('https://example.com/spring-sale?utm_source=sms');
+echo $link['code'];      // "Ab3xY7"
+echo $link['shortUrl'];  // "https://sendly.live/l/Ab3xY7"
+
+// List your links with click counts
+$result = $client->links()->list(['limit' => 20]);
+foreach ($result['links'] as $l) {
+    echo "{$l['shortUrl']} -> {$l['destinationUrl']} ({$l['clickCount']} clicks)\n";
+}
+
+// Kill a link (its redirect returns 404 until re-enabled)
+$client->links()->disable('Ab3xY7');
+
+// Re-enable it
+$client->links()->enable('Ab3xY7');
+```
+
 ## Webhooks
 
 ```php
@@ -292,12 +395,17 @@ $usage = $client->account()->getApiKeyUsage('key_xxx');
 echo "Messages sent: {$usage->messagesSent}";
 
 // Create a new API key
-$newKey = $client->account()->createApiKey([
-    'name' => 'Production Key',
-    'type' => 'live',
-    'scopes' => ['sms:send', 'sms:read']
+$newKey = $client->account()->createApiKey('Production Key', [
+    'expiresAt' => '2027-01-01T00:00:00Z', // optional
 ]);
-echo "New key: {$newKey->key}"; // Only shown once!
+echo "New key: {$newKey['key']}"; // Only shown once!
+
+// Rotate an API key (old key stays valid for a grace period, default 24h)
+$rotation = $client->account()->rotateApiKey('key_xxx', [
+    'gracePeriodHours' => 48, // optional; 24-168 inclusive
+]);
+echo "New key: {$rotation['newKey']['key']}"; // Only shown once!
+echo $rotation['message'];                     // "Old key will expire in 48 hours"
 
 // Revoke an API key
 $client->account()->revokeApiKey('key_xxx');
