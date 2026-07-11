@@ -30,7 +30,10 @@
   "autoload": {
     "psr-4": {
       "Sendly\\": "src/"
-    }
+    },
+    "classmap": [
+      "src/"
+    ]
   },
   "autoload-dev": {
     "psr-4": {
