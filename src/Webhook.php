@@ -45,6 +45,22 @@ class Webhook
     public const EVENT_CONTACT_MARKED_VALID = 'contact.marked_valid';
     public const EVENT_CONTACTS_LOOKUP_COMPLETED = 'contacts.lookup_completed';
     public const EVENT_CONTACTS_BULK_MARKED_VALID = 'contacts.bulk_marked_valid';
+    public const EVENT_BRAND_VERIFIED = 'brand.verified';
+    public const EVENT_BRAND_FAILED = 'brand.failed';
+    public const EVENT_CAMPAIGN_APPROVED = 'campaign.approved';
+    public const EVENT_CAMPAIGN_REJECTED = 'campaign.rejected';
+    public const EVENT_CAMPAIGN_SUSPENDED = 'campaign.suspended';
+    public const EVENT_ASSIGNMENT_CONFIRMED = 'assignment.confirmed';
+    public const EVENT_ASSIGNMENT_FAILED = 'assignment.failed';
+    public const EVENT_PORT_COMPLETED = 'port.completed';
+    public const EVENT_PORT_OUT_REQUESTED = 'port_out.requested';
+    public const EVENT_PORT_OUT_COMPLETED = 'port_out.completed';
+    public const EVENT_PORT_OUT_REJECTED = 'port_out.rejected';
+    public const EVENT_PORT_OUT_CANCELLED = 'port_out.cancelled';
+    public const EVENT_NUMBER_ACTIVATED = 'number.activated';
+    public const EVENT_NUMBER_FAILED = 'number.failed';
+    public const EVENT_NUMBER_REQUIREMENTS_REQUIRED = 'number.requirements_required';
+    public const EVENT_NUMBER_RELEASED = 'number.released';
 
     public const CIRCUIT_STATE_CLOSED = 'closed';
     public const CIRCUIT_STATE_OPEN = 'open';
