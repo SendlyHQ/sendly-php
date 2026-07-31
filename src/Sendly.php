@@ -24,6 +24,7 @@ use Sendly\Resources\BusinessUpgrade;
 use Sendly\Resources\Numbers;
 use Sendly\Resources\TenDlc;
 use Sendly\Resources\Links;
+use Sendly\Resources\WhatsApp;
 use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\AuthenticationException;
 use Sendly\Exceptions\RateLimitException;
@@ -74,6 +75,7 @@ class Sendly
     public Numbers $numbers;
     public TenDlc $tenDlc;
     public Links $links;
+    public WhatsApp $whatsapp;
 
     /**
      * Create a new Sendly client
@@ -112,6 +114,7 @@ class Sendly
         $this->numbers = new Numbers($this);
         $this->tenDlc = new TenDlc($this);
         $this->links = new Links($this);
+        $this->whatsapp = new WhatsApp($this);
     }
 
     /**
@@ -282,6 +285,16 @@ class Sendly
     public function links(): Links
     {
         return $this->links;
+    }
+
+    /**
+     * Get the WhatsApp resource
+     *
+     * @return WhatsApp
+     */
+    public function whatsapp(): WhatsApp
+    {
+        return $this->whatsapp;
     }
 
     /**

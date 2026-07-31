@@ -322,6 +322,99 @@ $client->links()->disable('Ab3xY7');
 $client->links()->enable('Ab3xY7');
 ```
 
+## WhatsApp
+
+Connect a number you own to WhatsApp, create Meta-reviewed message templates,
+check 24-hour conversation windows, and send WhatsApp messages by passing
+`'channel' => 'whatsapp'` to `messages()->send()`.
+
+Connecting a number is a one-time $19 setup (no monthly fee) and always ends
+with a human step: the signup returns a `connectUrl` that a person must open in
+a browser and log in with Facebook to link their WhatsApp Business Account.
+Free-form text and media only deliver inside an open 24-hour window (the
+recipient messaged you in the last 24h); an approved template works anytime.
+
+> **Note:** The WhatsApp channel is being rolled out gradually and is not yet
+> generally available; until it is enabled for your account the endpoints read
+> as absent and calls throw `NotFoundException` (HTTP 404). WhatsApp writes
+> (signup, templates, sends) require a live API key.
+
+```php
+// 1. Connect a number ($19 one-time). A human must finish the connect URL.
+$signup = $client->whatsapp()->signup->create('+15559876543');
+echo $signup['connectUrl']; // hand this to a person to complete in a browser
+
+// Poll until active
+$status = $client->whatsapp()->signup->get($signup['id']);
+echo $status['status']; // "initiated" -> "registering" -> "active"
+
+// List connected senders
+$result = $client->whatsapp()->senders->list();
+foreach ($result['senders'] as $s) {
+    echo "{$s['phoneNumber']} ({$s['displayName']}) — {$s['status']}\n";
+}
+
+// 2. Create a template (Meta reviews it, usually 24-48h)
+$template = $client->whatsapp()->templates->create([
+    'sender' => '+15559876543',
+    'name' => 'order_shipped',
+    'language' => 'en_US',
+    'category' => 'UTILITY',
+    'body' => 'Hi {{1}}, your order {{2}} has shipped!',
+    'examples' => ['1' => 'Sam', '2' => '#4821'],
+]);
+echo $template['status']; // "PENDING"
+
+// Fix a rejected template by editing it (template names are locked for
+// ~30 days after deletion, so edit instead of delete + re-create)
+$client->whatsapp()->templates->update($template['id'], [
+    'body' => 'Hi {{1}}, your order {{2}} is on its way!',
+    'examples' => ['1' => 'Sam', '2' => '#4821'],
+]);
+
+// List and delete templates
+$result = $client->whatsapp()->templates->list();
+$client->whatsapp()->templates->delete('wat_xxx');
+
+// 3. Check the 24-hour window, then send
+$window = $client->whatsapp()->window('+15559876543', '+15551234567');
+
+if ($window['open']) {
+    // Free-form text inside the window
+    $message = $client->messages()->send([
+        'channel' => 'whatsapp',
+        'to' => '+15551234567',
+        'from' => '+15559876543',
+        'text' => 'Your table is ready!',
+    ]);
+} else {
+    // An approved template works regardless of the window
+    $message = $client->messages()->send([
+        'channel' => 'whatsapp',
+        'to' => '+15551234567',
+        'from' => '+15559876543',
+        'template' => [
+            'name' => 'order_shipped',
+            'language' => 'en_US',
+            'variables' => ['1' => 'Acme Inc', '2' => '#4821'],
+        ],
+    ]);
+}
+
+echo $message['id'];
+echo $message['whatsapp']['kind']; // "text" or "template"
+echo $message['creditsUsed'];      // priced by destination country + category
+
+// Media with a caption (inside the window; exactly one media URL per message)
+$client->messages()->send([
+    'channel' => 'whatsapp',
+    'to' => '+15551234567',
+    'from' => '+15559876543',
+    'mediaUrls' => ['https://example.com/receipt.pdf'],
+    'text' => 'Here is your receipt.',
+]);
+```
+
 ## Webhooks
 
 ```php

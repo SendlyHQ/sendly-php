@@ -41,21 +41,47 @@ class Messages
      *         'mediaUrls' => [...],
      *     ]);
      *
+     * Pass 'channel' => 'whatsapp' in the options array to send on WhatsApp
+     * instead of SMS. WhatsApp sends require a live API key and a `from`
+     * number with an active WhatsApp connection (see $client->whatsapp).
+     * Provide one of `text` (free-form, only deliverable inside an open
+     * 24-hour window — outside it the API responds 422
+     * `whatsapp_window_closed`), `mediaUrls` (a single media attachment;
+     * optional `text` becomes its caption — also window-bound), or
+     * `template` (an approved template; works regardless of the window,
+     * with `name`, `language`, and optional `variables`/`buttons`):
+     *     $client->messages->send([
+     *         'channel' => 'whatsapp',
+     *         'to' => '+1...',
+     *         'from' => '+1...',
+     *         'template' => [
+     *             'name' => 'order_shipped',
+     *             'language' => 'en_US',
+     *             'variables' => ['1' => 'Acme Inc', '2' => '#4821'],
+     *         ],
+     *     ]);
+     *
      * @param string|array<string, mixed> $to Recipient phone number in E.164 format, OR an options array as above
      * @param string|null $text Message content (max 1600 characters). Required when $to is a string.
      * @param string|null $messageType 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
      * @param array<string, mixed>|null $metadata Custom JSON metadata (max 4KB)
      * @param array<string>|null $mediaUrls Media URLs to attach (sends as MMS)
      * @param string|null $from Sender ID or phone number (optional)
-     * @return Message The sent message
+     * @return Message|array<string, mixed> The sent message. SMS sends return
+     *   a Message; WhatsApp sends return the raw message array (id, channel,
+     *   message_format, to, from, text, status, segments, creditsUsed,
+     *   whatsapp: [kind, template?, messageId], createdAt, metadata).
      * @throws ValidationException If parameters are invalid
      */
-    public function send(string|array $to, ?string $text = null, ?string $messageType = null, ?array $metadata = null, ?array $mediaUrls = null, ?string $from = null): Message
+    public function send(string|array $to, ?string $text = null, ?string $messageType = null, ?array $metadata = null, ?array $mediaUrls = null, ?string $from = null): Message|array
     {
         // Array-style call: extract keys and delegate to positional form
         // so all validation + payload assembly stays in one place.
         if (is_array($to)) {
             $options = $to;
+            if (($options['channel'] ?? null) === 'whatsapp') {
+                return $this->sendWhatsApp($options);
+            }
             return $this->send(
                 (string) ($options['to'] ?? ''),
                 isset($options['text']) ? (string) $options['text'] : null,
@@ -99,6 +125,54 @@ class Messages
 
         $data = $response['message'] ?? $response['data'] ?? $response;
         return new Message($data);
+    }
+
+    /**
+     * Send a WhatsApp message ('channel' => 'whatsapp').
+     *
+     * @param array<string, mixed> $options WhatsApp message options
+     * @return array<string, mixed> The created WhatsApp message
+     * @throws ValidationException If no content is provided or a number is invalid
+     */
+    private function sendWhatsApp(array $options): array
+    {
+        $to = (string) ($options['to'] ?? '');
+        $from = (string) ($options['from'] ?? '');
+        $this->validatePhone($to);
+        $this->validatePhone($from);
+
+        $text = isset($options['text']) ? (string) $options['text'] : null;
+        $mediaUrls = $options['mediaUrls'] ?? $options['media_urls'] ?? null;
+        $template = $options['template'] ?? null;
+
+        $hasMedia = is_array($mediaUrls) && count($mediaUrls) > 0;
+        if (($text === null || $text === '') && !$hasMedia && $template === null) {
+            throw new ValidationException('Provide \'text\', \'mediaUrls\', or \'template\'');
+        }
+
+        $payload = [
+            'channel' => 'whatsapp',
+            'to' => $to,
+            'from' => $from,
+        ];
+
+        if ($text !== null) {
+            $payload['text'] = $text;
+        }
+
+        if ($hasMedia) {
+            $payload['mediaUrls'] = array_values($mediaUrls);
+        }
+
+        if ($template !== null) {
+            $payload['template'] = $template;
+        }
+
+        if (isset($options['metadata']) && is_array($options['metadata'])) {
+            $payload['metadata'] = $options['metadata'];
+        }
+
+        return $this->client->post('/messages', $payload);
     }
 
     /**
