@@ -277,6 +277,111 @@ class WhatsAppTest extends TestCase
         $client->whatsapp()->senders->list();
     }
 
+    // ==================== senders->getProfile() ====================
+
+    private function profile(array $overrides = []): array
+    {
+        return array_merge([
+            'phoneNumber' => '+15559876543',
+            'displayName' => 'Acme Coffee',
+            'profilePhotoUrl' => 'https://example.com/logo.png',
+            'category' => 'FOOD_AND_GROCERY',
+            'about' => 'Fresh roasted coffee, delivered.',
+            'description' => 'Small-batch roaster shipping nationwide.',
+            'email' => 'hello@acme.example',
+            'website' => 'https://acme.example',
+            'address' => '123 Bean St, Portland, OR',
+        ], $overrides);
+    }
+
+    public function testSendersGetProfile(): void
+    {
+        $capturedBody = null;
+        $capturedPath = null;
+        $client = $this->createCapturingClient([
+            new Response(200, [], json_encode($this->profile())),
+        ], $capturedBody, $capturedPath);
+
+        $profile = $client->whatsapp()->senders->getProfile('+15559876543');
+
+        $this->assertSame('/whatsapp/senders/+15559876543/profile', $capturedPath);
+        $this->assertSame('+15559876543', $profile['phoneNumber']);
+        $this->assertSame('Acme Coffee', $profile['displayName']);
+        $this->assertSame('https://example.com/logo.png', $profile['profilePhotoUrl']);
+        $this->assertSame('Fresh roasted coffee, delivered.', $profile['about']);
+        $this->assertSame('https://acme.example', $profile['website']);
+    }
+
+    public function testSendersGetProfileValidatesPhone(): void
+    {
+        $client = new Sendly('test_api_key');
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('Invalid phone number format');
+        $client->whatsapp()->senders->getProfile('not-a-number');
+    }
+
+    public function testSendersGetProfileNotConnected(): void
+    {
+        $client = $this->createMockClient([
+            new RequestException(
+                'Not Found',
+                new Request('GET', '/whatsapp/senders/+15559876543/profile'),
+                new Response(404, [], json_encode([
+                    'error' => 'whatsapp_sender_not_connected',
+                    'message' => "This number isn't connected to WhatsApp yet.",
+                ]))
+            ),
+        ]);
+
+        $this->expectException(NotFoundException::class);
+        $client->whatsapp()->senders->getProfile('+15559876543');
+    }
+
+    // ==================== senders->updateProfile() ====================
+
+    public function testSendersUpdateProfile(): void
+    {
+        $capturedBody = null;
+        $capturedPath = null;
+        $capturedQuery = null;
+        $capturedMethod = null;
+        $client = $this->createCapturingClient([
+            new Response(200, [], json_encode($this->profile([
+                'about' => 'Now roasting decaf too.',
+            ]))),
+        ], $capturedBody, $capturedPath, $capturedQuery, $capturedMethod);
+
+        $profile = $client->whatsapp()->senders->updateProfile('+15559876543', [
+            'about' => 'Now roasting decaf too.',
+            'website' => 'https://acme.example',
+        ]);
+
+        $this->assertSame('/whatsapp/senders/+15559876543/profile', $capturedPath);
+        $this->assertSame('PATCH', $capturedMethod);
+        $sentBody = json_decode($capturedBody, true);
+        $this->assertSame('Now roasting decaf too.', $sentBody['about']);
+        $this->assertSame('https://acme.example', $sentBody['website']);
+        $this->assertArrayNotHasKey('displayName', $sentBody);
+        $this->assertArrayNotHasKey('description', $sentBody);
+        $this->assertSame('Now roasting decaf too.', $profile['about']);
+    }
+
+    public function testSendersUpdateProfileRequiresAField(): void
+    {
+        $client = new Sendly('test_api_key');
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('Provide at least one profile field to update');
+        $client->whatsapp()->senders->updateProfile('+15559876543', []);
+    }
+
+    public function testSendersUpdateProfileValidatesPhone(): void
+    {
+        $client = new Sendly('test_api_key');
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('Invalid phone number format');
+        $client->whatsapp()->senders->updateProfile('not-a-number', ['about' => 'Hi']);
+    }
+
     // ==================== templates->list() ====================
 
     public function testTemplatesList(): void

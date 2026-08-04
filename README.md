@@ -354,6 +354,18 @@ foreach ($result['senders'] as $s) {
     echo "{$s['phoneNumber']} ({$s['displayName']}) — {$s['status']}\n";
 }
 
+// Read and update a sender's business profile (what recipients see when
+// they open your details in WhatsApp)
+$profile = $client->whatsapp()->senders->getProfile('+15559876543');
+echo $profile['displayName'];
+echo $profile['about'];
+
+$client->whatsapp()->senders->updateProfile('+15559876543', [
+    'about' => 'Fresh roasted coffee, delivered.',   // max 139 chars
+    'description' => 'Small-batch roaster shipping nationwide.', // max 512
+    'website' => 'https://acme.example',
+]);
+
 // 2. Create a template (Meta reviews it, usually 24-48h)
 $template = $client->whatsapp()->templates->create([
     'sender' => '+15559876543',
@@ -412,6 +424,80 @@ $client->messages()->send([
     'from' => '+15559876543',
     'mediaUrls' => ['https://example.com/receipt.pdf'],
     'text' => 'Here is your receipt.',
+]);
+```
+
+## RCS
+
+Send branded rich messages — text with suggested replies and actions, or rich
+cards with an image and buttons — through your workspace's RCS agent by
+passing `'channel' => 'rcs'` to `messages()->send()`. Delivery is
+per-recipient: not every device or network supports RCS. Text sends fall back
+to plain SMS automatically (billed as SMS) unless you disable the fallback;
+rich cards have no SMS form and only deliver to RCS-capable recipients.
+
+> **Note:** The RCS channel is being rolled out gradually and is not yet
+> generally available; until it is enabled for your account the endpoints read
+> as absent and calls throw `NotFoundException` (HTTP 404). RCS sends and
+> capability checks require a live API key. RCS agents are registered by
+> Sendly for your brand — contact support to set one up.
+
+```php
+// Discover your RCS agents ('testing' reaches invited test devices only;
+// 'approved' reaches everyone). Pass 'agentId' on sends and capability
+// checks when your workspace has more than one agent.
+$result = $client->rcs()->agents->list();
+foreach ($result['agents'] as $a) {
+    echo "{$a['name']} — {$a['status']}" . ($a['sendable'] ? ' (sendable)' : '') . "\n";
+}
+
+// Pre-flight: can this recipient receive RCS?
+$cap = $client->rcs()->capability('+15551234567');
+echo $cap['capable'] ? 'RCS' : 'would fall back to SMS';
+
+// Text with suggested replies and actions
+$message = $client->messages()->send([
+    'channel' => 'rcs',
+    'to' => '+15551234567',
+    'text' => 'Your order has shipped! Want live updates?',
+    'suggestions' => [
+        ['reply' => ['text' => 'Yes, notify me', 'postbackData' => 'notify_yes']],
+        ['action' => ['text' => 'Track order', 'postbackData' => 'track', 'url' => 'https://acme.example/orders/4821']],
+    ],
+]);
+
+// The response discloses which channel delivered
+echo $message['channel']; // "rcs", or "sms" when it fell back
+if (($message['fellBackTo'] ?? null) === 'sms') {
+    // Delivered as plain SMS (billed as SMS). Suggestions have no SMS form
+    // and were dropped ($message['rcs']['suggestionsDropped'] is true).
+} else {
+    echo $message['rcs']['kind'];      // "text" or "card"
+    echo $message['rcs']['agentName']; // the brand name recipients see
+}
+
+// Rich card (RCS-capable recipients only — cards have no SMS form)
+$client->messages()->send([
+    'channel' => 'rcs',
+    'to' => '+15551234567',
+    'card' => [
+        'title' => 'Spring collection',
+        'description' => 'New arrivals are in - take a look.',
+        'mediaUrl' => 'https://example.com/spring.jpg', // public JPEG/PNG/GIF
+        'orientation' => 'vertical', // or 'horizontal'
+        'suggestions' => [
+            ['action' => ['text' => 'Shop now', 'postbackData' => 'shop', 'url' => 'https://acme.example/spring']],
+        ],
+    ],
+]);
+
+// Opt out of the SMS fallback — the send fails with a 422
+// (rcs_not_supported_for_recipient) when the recipient can't receive RCS
+$client->messages()->send([
+    'channel' => 'rcs',
+    'to' => '+15551234567',
+    'text' => 'RCS or nothing',
+    'fallbackToSms' => false,
 ]);
 ```
 

@@ -108,6 +108,77 @@ class WhatsAppSenders
     {
         return $this->client->get('/whatsapp/senders');
     }
+
+    /**
+     * Get a sender's WhatsApp business profile.
+     *
+     * The business profile is what recipients see when they open the
+     * sender's details in WhatsApp: display name, photo, category, about
+     * line, description, and contact details. The sender must be `active`
+     * (connected to WhatsApp).
+     *
+     * @param string $phoneNumber Your WhatsApp-connected sending number, in E.164 format
+     * @return array{phoneNumber: string, displayName: ?string, profilePhotoUrl: ?string, category: ?string, about: ?string, description: ?string, email: ?string, website: ?string, address: ?string}
+     *   The profile. Unset fields are null.
+     * @throws ValidationException If the number is not E.164.
+     */
+    public function getProfile(string $phoneNumber): array
+    {
+        $this->validatePhone($phoneNumber);
+
+        return $this->client->get("/whatsapp/senders/{$phoneNumber}/profile");
+    }
+
+    /**
+     * Update a sender's WhatsApp business profile.
+     *
+     * Provide only the fields to change; omitted fields keep their current
+     * value. `about` is limited to 139 characters and `description` to 512.
+     * `displayName` changes are reviewed by Meta before they take effect.
+     * The profile photo cannot be set through this endpoint. Requires a
+     * live API key.
+     *
+     * @param string $phoneNumber Your WhatsApp-connected sending number, in E.164 format
+     * @param array{displayName?: string, about?: string, description?: string, category?: string, email?: string, website?: string, address?: string} $fields
+     *   The profile fields to change.
+     * @return array{phoneNumber: string, displayName: ?string, profilePhotoUrl: ?string, category: ?string, about: ?string, description: ?string, email: ?string, website: ?string, address: ?string}
+     *   The updated profile.
+     * @throws ValidationException If the number is not E.164 or no field is provided.
+     */
+    public function updateProfile(string $phoneNumber, array $fields): array
+    {
+        $this->validatePhone($phoneNumber);
+
+        $body = array_filter([
+            'displayName' => $fields['displayName'] ?? null,
+            'about' => $fields['about'] ?? null,
+            'description' => $fields['description'] ?? null,
+            'category' => $fields['category'] ?? null,
+            'email' => $fields['email'] ?? null,
+            'website' => $fields['website'] ?? null,
+            'address' => $fields['address'] ?? null,
+        ], fn($v) => $v !== null);
+
+        if (empty($body)) {
+            throw new ValidationException('Provide at least one profile field to update');
+        }
+
+        return $this->client->patch("/whatsapp/senders/{$phoneNumber}/profile", $body);
+    }
+
+    /**
+     * Validate phone number format
+     *
+     * @throws ValidationException
+     */
+    private function validatePhone(string $phone): void
+    {
+        if (!preg_match('/^\+[1-9]\d{1,14}$/', $phone)) {
+            throw new ValidationException(
+                'Invalid phone number format. Use E.164 format (e.g., +15551234567)'
+            );
+        }
+    }
 }
 
 class WhatsAppTemplates
@@ -274,8 +345,8 @@ class WhatsAppTemplates
 }
 
 /**
- * WhatsApp resource — connect senders, manage Meta-reviewed message
- * templates, and check 24-hour conversation windows.
+ * WhatsApp resource — connect senders, manage their business profiles and
+ * Meta-reviewed message templates, and check 24-hour conversation windows.
  *
  * WhatsApp is a first-class Sendly channel: connect a number you own, create
  * message templates, and send via

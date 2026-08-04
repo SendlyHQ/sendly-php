@@ -61,6 +61,25 @@ class Messages
      *         ],
      *     ]);
      *
+     * Pass 'channel' => 'rcs' in the options array to send on RCS instead.
+     * RCS sends require a live API key and a sendable RCS agent on your
+     * workspace (see $client->rcs). Provide exactly one of `text`
+     * (free-form, optionally with `suggestions` — suggested replies and URL
+     * actions) or `card` (a rich card with `title`, `description`, and
+     * optional `mediaUrl`, `orientation`, and `suggestions`). `agentId`
+     * picks the sending agent when your workspace has more than one.
+     * Recipients that can't receive RCS get `text` delivered as plain SMS
+     * (billed as SMS) unless `fallbackToSms` is false — the response
+     * discloses which channel delivered (see {@see sendRcs()}):
+     *     $client->messages->send([
+     *         'channel' => 'rcs',
+     *         'to' => '+1...',
+     *         'text' => 'Your order has shipped!',
+     *         'suggestions' => [
+     *             ['reply' => ['text' => 'Notify me', 'postbackData' => 'notify']],
+     *         ],
+     *     ]);
+     *
      * @param string|array<string, mixed> $to Recipient phone number in E.164 format, OR an options array as above
      * @param string|null $text Message content (max 1600 characters). Required when $to is a string.
      * @param string|null $messageType 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
@@ -70,7 +89,8 @@ class Messages
      * @return Message|array<string, mixed> The sent message. SMS sends return
      *   a Message; WhatsApp sends return the raw message array (id, channel,
      *   message_format, to, from, text, status, segments, creditsUsed,
-     *   whatsapp: [kind, template?, messageId], createdAt, metadata).
+     *   whatsapp: [kind, template?, messageId], createdAt, metadata); RCS
+     *   sends return the raw message array (see {@see sendRcs()}).
      * @throws ValidationException If parameters are invalid
      */
     public function send(string|array $to, ?string $text = null, ?string $messageType = null, ?array $metadata = null, ?array $mediaUrls = null, ?string $from = null): Message|array
@@ -81,6 +101,9 @@ class Messages
             $options = $to;
             if (($options['channel'] ?? null) === 'whatsapp') {
                 return $this->sendWhatsApp($options);
+            }
+            if (($options['channel'] ?? null) === 'rcs') {
+                return $this->sendRcs($options);
             }
             return $this->send(
                 (string) ($options['to'] ?? ''),
@@ -166,6 +189,64 @@ class Messages
 
         if ($template !== null) {
             $payload['template'] = $template;
+        }
+
+        if (isset($options['metadata']) && is_array($options['metadata'])) {
+            $payload['metadata'] = $options['metadata'];
+        }
+
+        return $this->client->post('/messages', $payload);
+    }
+
+    /**
+     * Send an RCS message ('channel' => 'rcs').
+     *
+     * @param array<string, mixed> $options RCS message options
+     * @return array<string, mixed> The created message. Delivered as RCS the
+     *   response has channel 'rcs' (id, channel, message_format, to, from,
+     *   text, status, segments, creditsUsed, rcs: [kind, agentId, agentName],
+     *   createdAt, metadata); when the recipient can't receive RCS and the
+     *   fallback is on, it has channel 'sms' and fellBackTo 'sms' (billed as
+     *   SMS), with rcs: [requestedChannel, agentId, suggestionsDropped?] —
+     *   suggestions have no SMS form and are dropped.
+     * @throws ValidationException If content is missing or ambiguous, or the number is invalid
+     */
+    private function sendRcs(array $options): array
+    {
+        $to = (string) ($options['to'] ?? '');
+        $this->validatePhone($to);
+
+        $text = isset($options['text']) ? (string) $options['text'] : null;
+        $card = $options['card'] ?? null;
+
+        $hasText = $text !== null && $text !== '';
+        if ($hasText === ($card !== null)) {
+            throw new ValidationException('Provide exactly one of \'text\' or \'card\'');
+        }
+
+        $payload = [
+            'channel' => 'rcs',
+            'to' => $to,
+        ];
+
+        if (isset($options['agentId'])) {
+            $payload['agentId'] = (string) $options['agentId'];
+        }
+
+        if ($hasText) {
+            $payload['text'] = $text;
+        }
+
+        if ($card !== null) {
+            $payload['card'] = $card;
+        }
+
+        if (isset($options['suggestions']) && is_array($options['suggestions'])) {
+            $payload['suggestions'] = array_values($options['suggestions']);
+        }
+
+        if (array_key_exists('fallbackToSms', $options)) {
+            $payload['fallbackToSms'] = (bool) $options['fallbackToSms'];
         }
 
         if (isset($options['metadata']) && is_array($options['metadata'])) {
