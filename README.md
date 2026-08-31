@@ -260,6 +260,25 @@ echo $result['explanation'];  // what changed and why
 echo $result['model'] ?? '';  // model used, when available
 ```
 
+## Idempotency
+
+POSTs carry an automatically generated `Idempotency-Key`, reused across the
+SDK's own retries, so a retry of a request that already reached the API returns
+the original result instead of sending and charging again. Pass your own key
+(1-255 printable ASCII characters) when the guarantee needs to outlive the
+process, such as a job queue that re-runs after a crash: repeating a request
+with the same key within 24 hours returns the original response instead of
+executing again. `sendBatch()` sends no automatic key, because the API already
+deduplicates identical batches by their contents.
+
+```php
+$message = $client->messages()->send(
+    '+15551234567',
+    'Your order has shipped!',
+    idempotencyKey: 'order-4821-shipped'
+);
+```
+
 ## Numbers
 
 List the phone numbers on your account, inspect one, make a number your default
