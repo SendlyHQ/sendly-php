@@ -190,7 +190,7 @@ class TenDlcTest extends TestCase
 
         $result = $client->tenDlc()->getBrand('brd_1');
 
-        $this->assertSame('/tendlc/brands/brd_1', $capturedPath);
+        $this->assertSame('/api/v1/tendlc/brands/brd_1', $capturedPath);
         $this->assertSame('verified', $result['data']['status']);
         $this->assertSame('VERIFIED', $result['data']['identityStatus']);
     }
@@ -250,7 +250,7 @@ class TenDlcTest extends TestCase
 
         $result = $client->tenDlc()->qualify('brd_1', 'MIXED');
 
-        $this->assertSame('/tendlc/brands/brd_1/qualify/MIXED', $capturedPath);
+        $this->assertSame('/api/v1/tendlc/brands/brd_1/qualify/MIXED', $capturedPath);
         $this->assertTrue($result['data']['qualified']);
         $this->assertSame('Standard', $result['data']['throughput']['tier']);
         $this->assertSame(3, $result['data']['throughput']['carriersReady']);
@@ -437,7 +437,7 @@ class TenDlcTest extends TestCase
 
         $result = $client->tenDlc()->getCampaign('cmp_1');
 
-        $this->assertSame('/tendlc/campaigns/cmp_1', $capturedPath);
+        $this->assertSame('/api/v1/tendlc/campaigns/cmp_1', $capturedPath);
         $this->assertSame('active', $result['data']['status']);
         $this->assertSame('Standard', $result['data']['throughput']['tier']);
     }
@@ -484,7 +484,7 @@ class TenDlcTest extends TestCase
 
         $result = $client->tenDlc()->assignNumber('cmp_1', '+15551234567');
 
-        $this->assertSame('/tendlc/campaigns/cmp_1/assign', $capturedPath);
+        $this->assertSame('/api/v1/tendlc/campaigns/cmp_1/assign', $capturedPath);
         $sentBody = json_decode($capturedBody, true);
         $this->assertSame(['phoneNumber' => '+15551234567'], $sentBody);
         $this->assertSame('asn_1', $result['data']['id']);

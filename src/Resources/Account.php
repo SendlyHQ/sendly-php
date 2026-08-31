@@ -61,7 +61,7 @@ class Account
             'type' => $options['type'] ?? null,
         ], fn($v) => $v !== null);
 
-        $response = $this->client->get('/account/transactions', $params);
+        $response = $this->client->get('/credits/transactions', $params);
         $transactions = $response['transactions'] ?? $response['data'] ?? $response;
 
         if (!is_array($transactions)) {
@@ -79,7 +79,7 @@ class Account
     public function apiKeys(): array
     {
         $response = $this->client->get('/account/keys');
-        $keys = $response['api_keys'] ?? $response['apiKeys'] ?? $response['data'] ?? $response;
+        $keys = $response['keys'] ?? $response['api_keys'] ?? $response['apiKeys'] ?? $response['data'] ?? $response;
 
         if (!is_array($keys)) {
             return [];
@@ -196,7 +196,7 @@ class Account
             throw new ValidationException('API key ID is required');
         }
 
-        $this->client->delete("/account/keys/{$id}");
+        $this->client->patch("/account/keys/{$id}/revoke");
         return true;
     }
 

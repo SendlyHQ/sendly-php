@@ -122,7 +122,7 @@ class RcsTest extends TestCase
 
         $result = $client->rcs()->agents->list();
 
-        $this->assertSame('/rcs/agents', $capturedPath);
+        $this->assertSame('/api/v1/rcs/agents', $capturedPath);
         $this->assertCount(2, $result['agents']);
         $this->assertSame('rca_1', $result['agents'][0]['id']);
         $this->assertSame('Acme Coffee', $result['agents'][0]['name']);
@@ -177,7 +177,7 @@ class RcsTest extends TestCase
 
         $result = $client->rcs()->capability('+15551234567', 'rca_1');
 
-        $this->assertSame('/rcs/capability', $capturedPath);
+        $this->assertSame('/api/v1/rcs/capability', $capturedPath);
         parse_str($capturedQuery, $sentQuery);
         $this->assertSame(['to' => '+15551234567', 'agentId' => 'rca_1'], $sentQuery);
         $this->assertTrue($result['capable']);
@@ -252,7 +252,7 @@ class RcsTest extends TestCase
             'text' => 'Your order has shipped!',
         ]);
 
-        $this->assertSame('/messages', $capturedPath);
+        $this->assertSame('/api/v1/messages', $capturedPath);
         $sentBody = json_decode($capturedBody, true);
         $this->assertSame('rcs', $sentBody['channel']);
         $this->assertSame('+15551234567', $sentBody['to']);

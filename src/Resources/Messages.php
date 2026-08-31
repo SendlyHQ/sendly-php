@@ -86,6 +86,12 @@ class Messages
      * @param array<string, mixed>|null $metadata Custom JSON metadata (max 4KB)
      * @param array<string>|null $mediaUrls Media URLs to attach (sends as MMS)
      * @param string|null $from Sender ID or phone number (optional)
+     * @param string|null $idempotencyKey Idempotency key for this send (1-255 printable
+     *   ASCII characters; also accepted as 'idempotencyKey' in the options array). The
+     *   SDK already generates a key per logical request automatically, so the server can
+     *   dedupe the SDK's own retries. Supply your own key when you need idempotency
+     *   across process restarts or your own retry loops - repeating a request with the
+     *   same key within 24 hours returns the original response instead of executing again.
      * @return Message|array<string, mixed> The sent message. SMS sends return
      *   a Message; WhatsApp sends return the raw message array (id, channel,
      *   message_format, to, from, text, status, segments, creditsUsed,
@@ -93,7 +99,7 @@ class Messages
      *   sends return the raw message array (see {@see sendRcs()}).
      * @throws ValidationException If parameters are invalid
      */
-    public function send(string|array $to, ?string $text = null, ?string $messageType = null, ?array $metadata = null, ?array $mediaUrls = null, ?string $from = null): Message|array
+    public function send(string|array $to, ?string $text = null, ?string $messageType = null, ?array $metadata = null, ?array $mediaUrls = null, ?string $from = null, ?string $idempotencyKey = null): Message|array
     {
         // Array-style call: extract keys and delegate to positional form
         // so all validation + payload assembly stays in one place.
@@ -112,6 +118,7 @@ class Messages
                 $options['metadata'] ?? null,
                 $options['mediaUrls'] ?? null,
                 isset($options['from']) ? (string) $options['from'] : null,
+                isset($options['idempotencyKey']) ? (string) $options['idempotencyKey'] : null,
             );
         }
 
@@ -144,7 +151,7 @@ class Messages
             $payload['mediaUrls'] = $mediaUrls;
         }
 
-        $response = $this->client->post('/messages', $payload);
+        $response = $this->client->post('/messages', $payload, $idempotencyKey);
 
         $data = $response['message'] ?? $response['data'] ?? $response;
         return new Message($data);
@@ -195,7 +202,11 @@ class Messages
             $payload['metadata'] = $options['metadata'];
         }
 
-        return $this->client->post('/messages', $payload);
+        return $this->client->post(
+            '/messages',
+            $payload,
+            isset($options['idempotencyKey']) ? (string) $options['idempotencyKey'] : null,
+        );
     }
 
     /**
@@ -253,7 +264,11 @@ class Messages
             $payload['metadata'] = $options['metadata'];
         }
 
-        return $this->client->post('/messages', $payload);
+        return $this->client->post(
+            '/messages',
+            $payload,
+            isset($options['idempotencyKey']) ? (string) $options['idempotencyKey'] : null,
+        );
     }
 
     /**
@@ -271,10 +286,11 @@ class Messages
      *       'text' => 'Hey team - quick sync at noon?',
      *   ]);
      *
-     * @param array{to: array<string>, text?: string, from?: string, mediaUrls?: array<string>, messageType?: string} $options
+     * @param array{to: array<string>, text?: string, from?: string, mediaUrls?: array<string>, messageType?: string, idempotencyKey?: string} $options
      *   Group message options. `to` (2-8 US/CA recipients) is required, plus
      *   at least one of `text` or `mediaUrls`. `mediaUrls` may also be given
-     *   as `media_urls`.
+     *   as `media_urls`. `idempotencyKey` (1-255 printable ASCII characters)
+     *   overrides the auto-generated per-request key.
      * @return array<string, mixed> The group message (id, status, to, group_message_id, simulated)
      * @throws ValidationException If recipient count is out of range or no body is provided
      */
@@ -321,7 +337,11 @@ class Messages
             $payload['messageType'] = $messageType;
         }
 
-        return $this->client->post('/messages/group', $payload);
+        return $this->client->post(
+            '/messages/group',
+            $payload,
+            isset($options['idempotencyKey']) ? (string) $options['idempotencyKey'] : null,
+        );
     }
 
     /**
@@ -429,10 +449,11 @@ class Messages
      * @param string|null $from Sender ID or phone number (optional)
      * @param string|null $messageType Message type: 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
      * @param array<string, mixed>|null $metadata Custom JSON metadata to attach to the message (max 4KB)
+     * @param string|null $idempotencyKey Idempotency key (1-255 printable ASCII characters). Overrides the auto-generated per-request key.
      * @return array<string, mixed> The scheduled message
      * @throws ValidationException If parameters are invalid
      */
-    public function schedule(string $to, string $text, string $scheduledAt, ?string $from = null, ?string $messageType = null, ?array $metadata = null): array
+    public function schedule(string $to, string $text, string $scheduledAt, ?string $from = null, ?string $messageType = null, ?array $metadata = null, ?string $idempotencyKey = null): array
     {
         $this->validatePhone($to);
         $this->validateText($text);
@@ -460,7 +481,7 @@ class Messages
             $payload['metadata'] = $metadata;
         }
 
-        return $this->client->post('/messages/schedule', $payload);
+        return $this->client->post('/messages/schedule', $payload, $idempotencyKey);
     }
 
     /**
@@ -519,10 +540,11 @@ class Messages
      * @param string|null $from Sender ID or phone number (optional, applies to all)
      * @param string|null $messageType Message type: 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
      * @param array<string, mixed>|null $metadata Custom JSON metadata to attach to all messages (max 4KB)
+     * @param string|null $idempotencyKey Idempotency key (1-255 printable ASCII characters). No key is auto-generated for batch sends.
      * @return array<string, mixed> Batch response with batch ID and status
      * @throws ValidationException If parameters are invalid
      */
-    public function sendBatch(array $messages, ?string $from = null, ?string $messageType = null, ?array $metadata = null): array
+    public function sendBatch(array $messages, ?string $from = null, ?string $messageType = null, ?array $metadata = null, ?string $idempotencyKey = null): array
     {
         if (empty($messages)) {
             throw new ValidationException('Messages array cannot be empty');
@@ -551,7 +573,10 @@ class Messages
             $payload['metadata'] = $metadata;
         }
 
-        return $this->client->post('/messages/batch', $payload);
+        // The batch endpoint dedupes header-less retries server-side by hashing
+        // the request content; an auto-generated key would bypass that net for
+        // identical cross-process re-runs, so only caller-supplied keys are sent.
+        return $this->client->post('/messages/batch', $payload, $idempotencyKey, false);
     }
 
     /**

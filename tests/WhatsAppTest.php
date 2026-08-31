@@ -122,7 +122,7 @@ class WhatsAppTest extends TestCase
 
         $signup = $client->whatsapp()->signup->create('+15559876543');
 
-        $this->assertSame('/whatsapp/signup', $capturedPath);
+        $this->assertSame('/api/v1/whatsapp/signup', $capturedPath);
         $this->assertSame(['phoneNumber' => '+15559876543'], json_decode($capturedBody, true));
         $this->assertSame('was_1', $signup['id']);
         $this->assertSame('https://sendly.live/wa/connect/tok_abc', $signup['connectUrl']);
@@ -178,7 +178,7 @@ class WhatsAppTest extends TestCase
 
         $signup = $client->whatsapp()->signup->get('was_1');
 
-        $this->assertSame('/whatsapp/signup/was_1', $capturedPath);
+        $this->assertSame('/api/v1/whatsapp/signup/was_1', $capturedPath);
         $this->assertSame('active', $signup['status']);
         $this->assertSame('waba_123', $signup['businessAccountId']);
     }
@@ -242,7 +242,7 @@ class WhatsAppTest extends TestCase
 
         $result = $client->whatsapp()->senders->list();
 
-        $this->assertSame('/whatsapp/senders', $capturedPath);
+        $this->assertSame('/api/v1/whatsapp/senders', $capturedPath);
         $this->assertCount(2, $result['senders']);
         $this->assertSame('+15559876543', $result['senders'][0]['phoneNumber']);
         $this->assertSame('Acme Coffee', $result['senders'][0]['displayName']);
@@ -304,7 +304,7 @@ class WhatsAppTest extends TestCase
 
         $profile = $client->whatsapp()->senders->getProfile('+15559876543');
 
-        $this->assertSame('/whatsapp/senders/+15559876543/profile', $capturedPath);
+        $this->assertSame('/api/v1/whatsapp/senders/+15559876543/profile', $capturedPath);
         $this->assertSame('+15559876543', $profile['phoneNumber']);
         $this->assertSame('Acme Coffee', $profile['displayName']);
         $this->assertSame('https://example.com/logo.png', $profile['profilePhotoUrl']);
@@ -356,7 +356,7 @@ class WhatsAppTest extends TestCase
             'website' => 'https://acme.example',
         ]);
 
-        $this->assertSame('/whatsapp/senders/+15559876543/profile', $capturedPath);
+        $this->assertSame('/api/v1/whatsapp/senders/+15559876543/profile', $capturedPath);
         $this->assertSame('PATCH', $capturedMethod);
         $sentBody = json_decode($capturedBody, true);
         $this->assertSame('Now roasting decaf too.', $sentBody['about']);
@@ -399,7 +399,7 @@ class WhatsAppTest extends TestCase
 
         $result = $client->whatsapp()->templates->list();
 
-        $this->assertSame('/whatsapp/templates', $capturedPath);
+        $this->assertSame('/api/v1/whatsapp/templates', $capturedPath);
         $this->assertCount(2, $result['templates']);
         $this->assertSame('wat_2', $result['templates'][1]['id']);
         $this->assertSame('APPROVED', $result['templates'][1]['status']);
@@ -430,7 +430,7 @@ class WhatsAppTest extends TestCase
             'examples' => ['1' => 'Sam', '2' => '#4821'],
         ]);
 
-        $this->assertSame('/whatsapp/templates', $capturedPath);
+        $this->assertSame('/api/v1/whatsapp/templates', $capturedPath);
         $sentBody = json_decode($capturedBody, true);
         $this->assertSame('+15559876543', $sentBody['sender']);
         $this->assertSame('order_shipped', $sentBody['name']);
@@ -588,7 +588,7 @@ class WhatsAppTest extends TestCase
             'examples' => ['1' => 'Sam', '2' => '#4821'],
         ]);
 
-        $this->assertSame('/whatsapp/templates/wat_1', $capturedPath);
+        $this->assertSame('/api/v1/whatsapp/templates/wat_1', $capturedPath);
         $this->assertSame('PATCH', $capturedMethod);
         $sentBody = json_decode($capturedBody, true);
         $this->assertSame('Hi {{1}}, your order {{2}} is on its way!', $sentBody['body']);
@@ -621,7 +621,7 @@ class WhatsAppTest extends TestCase
 
         $result = $client->whatsapp()->templates->delete('wat_1');
 
-        $this->assertSame('/whatsapp/templates/wat_1', $capturedPath);
+        $this->assertSame('/api/v1/whatsapp/templates/wat_1', $capturedPath);
         $this->assertSame('DELETE', $capturedMethod);
         $this->assertSame('wat_1', $result['id']);
         $this->assertTrue($result['deleted']);
@@ -651,7 +651,7 @@ class WhatsAppTest extends TestCase
 
         $window = $client->whatsapp()->window('+15559876543', '+15551234567');
 
-        $this->assertSame('/whatsapp/window', $capturedPath);
+        $this->assertSame('/api/v1/whatsapp/window', $capturedPath);
         parse_str($capturedQuery, $sentQuery);
         $this->assertSame(['from' => '+15559876543', 'to' => '+15551234567'], $sentQuery);
         $this->assertTrue($window['open']);
@@ -730,7 +730,7 @@ class WhatsAppTest extends TestCase
             ],
         ]);
 
-        $this->assertSame('/messages', $capturedPath);
+        $this->assertSame('/api/v1/messages', $capturedPath);
         $sentBody = json_decode($capturedBody, true);
         $this->assertSame('whatsapp', $sentBody['channel']);
         $this->assertSame('+15551234567', $sentBody['to']);
