@@ -1,5 +1,13 @@
 # sendly/sendly-php
 
+## Unreleased
+
+### Minor Changes
+
+- **RCS registration over the API.** `$client->rcs` gains `registration->get()`, `dossier->get()`, `brands->create()` / `update()`, and `agents->create()` / `get()` / `update()` / `setTestDevices()` / `submit()` / `requestLaunch()`, mirroring the dashboard's RCS registration flow: draft a brand and an agent, submit them for review (Sendly first, then the carrier network), invite test devices, and request launch. Reads need an API key with the `rcs:read` scope, writes `rcs:write`. Logo, hero and call-to-action media must be public `https://` URLs; file upload stays dashboard-only. `agents->list()` rows now carry `stage`. The channel is still rolling out: while it is off for your account these endpoints throw `NotFoundException` (`rcs_not_enabled`). `RcsCustomerStage`, `RcsReviewStatus` and `RcsErrorCode` hold the string values the endpoints use.
+
+- **`SendlyException::getApiErrorCode()`** returns the API's `error` code (`rcs_field_locked`, `insufficient_permissions`, ...) next to the message, on every typed exception. `ValidationException::getDetails()` now also carries the API's `errors` list (`[{path, message}]`) when a response has one instead of `details`.
+
 ## 3.38.0
 
 ### Minor Changes

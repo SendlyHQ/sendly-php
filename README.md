@@ -457,9 +457,109 @@ rich cards have no SMS form and only deliver to RCS-capable recipients.
 
 > **Note:** The RCS channel is being rolled out gradually and is not yet
 > generally available; until it is enabled for your account the endpoints read
-> as absent and calls throw `NotFoundException` (HTTP 404). RCS sends and
-> capability checks require a live API key. RCS agents are registered by
-> Sendly for your brand — contact support to set one up.
+> as absent and calls throw `NotFoundException` (HTTP 404; the registration
+> endpoints answer `rcs_not_enabled`). RCS sends and capability checks require
+> a live API key. Registration reads need an API key with the `rcs:read` scope
+> and writes the `rcs:write` scope.
+
+### Register a brand and agent
+
+Registration is self-serve, from the RCS section of your dashboard or over the
+API, and open to US businesses for now. Draft a brand (your business identity)
+and an agent (the sender recipients see), then submit them. Sendly reviews the
+registration first, then the carrier network verifies your business and
+reviews the agent. Once the agent reaches `testing` you invite handsets, send
+to them, file the campaign details, and request launch.
+
+Logo, hero and call-to-action media must already be hosted at public
+`https://` URLs. File upload is dashboard-only.
+
+```php
+use Sendly\Resources\RcsCustomerStage;
+
+// Prefill from what Sendly already holds (your 10DLC brand or toll-free verification)
+$dossier = $client->rcs()->dossier->get();
+
+$brand = $client->rcs()->brands->create(array_merge($dossier['brand'], [
+    'displayName' => 'Acme Coffee',
+    'legalEntityType' => 'LIMITED_LIABILITY_COMPANY',
+    'organizationType' => 'PRIVATE_PROFIT',
+    'websiteUrl' => 'https://acme.example',
+    'ein' => '12-3456789',
+    'address' => ['line1' => '1 Market St', 'city' => 'San Francisco', 'state' => 'CA', 'postalCode' => '94105', 'countryCode' => 'US'],
+    'contact' => ['firstName' => 'Jane', 'lastName' => 'Doe', 'email' => 'jane@acme.example', 'phoneNumber' => '+15551234567'],
+]))['brand'];
+
+$agent = $client->rcs()->agents->create([
+    'brandId' => $brand['id'],
+    'displayName' => 'Acme Coffee',
+    'useCase' => 'MULTI_USE',
+    'basics' => [
+        'description' => 'Order updates and offers from Acme Coffee.',
+        'logoUrl' => 'https://acme.example/rcs/logo.png',
+        'heroUrl' => 'https://acme.example/rcs/hero.png',
+        'brandColor' => '#6B4F3A',
+        'privacyPolicyUrl' => 'https://acme.example/privacy',
+        'termsAndConditionsUrl' => 'https://acme.example/terms',
+        'phoneNumber' => ['number' => '+15551234567', 'label' => 'Call us'],
+        'website' => ['url' => 'https://acme.example', 'label' => 'Visit us'],
+    ],
+])['agent'];
+
+// Submit both for review (pass your own idempotency key so a retried job
+// does not file the request twice), then watch the stage
+$client->rcs()->agents->submit($agent['id'], 'acme-rcs-submit-1');
+
+$registration = $client->rcs()->registration->get();
+echo $registration['stage']; // in_review, changes_requested, brand_verification, agent_review, testing, ...
+if ($registration['stage'] === RcsCustomerStage::CHANGES_REQUESTED) {
+    echo $registration['agent']['reviewNote'];
+    $client->rcs()->agents->update($agent['id'], ['basics' => ['description' => 'Order updates from Acme Coffee.']]);
+    $client->rcs()->agents->submit($agent['id']);
+}
+
+// In testing: invite handsets (the list replaces the previous one), send to
+// them, then file the campaign details and request launch
+$client->rcs()->agents->setTestDevices($agent['id'], [
+    '+15551234567',
+    ['phoneNumber' => '+15559876543', 'label' => 'QA phone'],
+]);
+
+$client->rcs()->agents->update($agent['id'], [
+    'campaign' => [
+        'agentOverview' => 'Sends order confirmations, pickup alerts and occasional offers to opted-in customers.',
+        'interactions' => [
+            ['interactionType' => 'TRANSACTIONAL_UPDATES', 'description' => 'Order and pickup status'],
+        ],
+        'messageExamples' => [
+            'Your order #4821 is ready for pickup.',
+            'Thanks for your order! We will text you when it is ready.',
+            'Reply STOP to opt out at any time.',
+        ],
+        'consentSettings' => [
+            'optInMethods' => [['methodType' => 'WEBSITE', 'description' => 'Checkbox at checkout']],
+            'optInMessage' => 'Acme Coffee: you are opted in to order updates. Reply STOP to opt out.',
+            'helpResponse' => 'Acme Coffee: reply STOP to opt out or call +1 555 123 4567.',
+            'optOutResponse' => 'Acme Coffee: you are opted out and will receive no more messages.',
+        ],
+    ],
+]);
+$client->rcs()->agents->requestLaunch($agent['id'], ['testUrl' => 'https://acme.example/rcs-test-notes']);
+
+// Field-level problems come back as ValidationException with the API's
+// errors list; review locks and not-ready states as SendlyException
+try {
+    $client->rcs()->agents->submit($agent['id']);
+} catch (\Sendly\Exceptions\ValidationException $e) {
+    foreach ($e->getDetails() ?? [] as $issue) {
+        echo "{$issue['path']}: {$issue['message']}\n"; // e.g. brand.ein: Enter a 9-digit EIN
+    }
+} catch (\Sendly\Exceptions\SendlyException $e) {
+    echo $e->getApiErrorCode(); // rcs_field_locked, rcs_brand_not_verified, ...
+}
+```
+
+### Send over RCS
 
 ```php
 // Discover your RCS agents ('testing' reaches invited test devices only;
@@ -640,6 +740,7 @@ try {
     // Other error
     echo $e->getMessage();
     echo $e->getErrorCode();
+    echo $e->getApiErrorCode(); // the API's error code, e.g. "rcs_field_locked"
 }
 ```
 

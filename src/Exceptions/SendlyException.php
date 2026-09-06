@@ -16,6 +16,8 @@ class SendlyException extends Exception
     /** @var array<string, mixed>|null */
     protected ?array $details = null;
 
+    protected ?string $apiErrorCode = null;
+
     public function __construct(
         string $message = '',
         int $code = 0,
@@ -40,5 +42,27 @@ class SendlyException extends Exception
     public function getDetails(): ?array
     {
         return $this->details;
+    }
+
+    /**
+     * The machine-readable `error` code the API responded with (for example
+     * `rcs_field_locked` or `insufficient_permissions`), or null when the
+     * error did not come from an API response.
+     */
+    public function getApiErrorCode(): ?string
+    {
+        return $this->apiErrorCode;
+    }
+
+    /**
+     * Attach the API's `error` code to this exception.
+     *
+     * @return static
+     */
+    public function withApiErrorCode(?string $code): static
+    {
+        $this->apiErrorCode = $code;
+
+        return $this;
     }
 }

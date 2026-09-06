@@ -608,7 +608,10 @@ class Sendly
         $body = json_decode((string) $response->getBody(), true) ?? [];
         $message = $body['message'] ?? $body['error'] ?? 'Unknown error';
 
-        return match ($statusCode) {
+        $details = $body['details'] ?? $body['errors'] ?? null;
+        $errorCode = $body['error'] ?? null;
+
+        $exception = match ($statusCode) {
             401 => new AuthenticationException($message),
             402 => new InsufficientCreditsException($message),
             404 => new NotFoundException($message),
@@ -616,8 +619,10 @@ class Sendly
                 $message,
                 (int) ($response->getHeader('Retry-After')[0] ?? 0)
             ),
-            400, 422 => new ValidationException($message, $body['details'] ?? null),
+            400, 422 => new ValidationException($message, is_array($details) ? $details : null),
             default => new SendlyException($message, $statusCode),
         };
+
+        return $exception->withApiErrorCode(is_string($errorCode) ? $errorCode : null);
     }
 }
