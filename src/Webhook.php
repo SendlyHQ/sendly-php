@@ -37,10 +37,25 @@ class Webhook
 {
     public const EVENT_MESSAGE_SENT = 'message.sent';
     public const EVENT_MESSAGE_DELIVERED = 'message.delivered';
+    public const EVENT_MESSAGE_READ = 'message.read';
     public const EVENT_MESSAGE_FAILED = 'message.failed';
     public const EVENT_MESSAGE_BOUNCED = 'message.bounced';
     public const EVENT_MESSAGE_RETRYING = 'message.retrying';
     public const EVENT_MESSAGE_RECEIVED = 'message.received';
+    public const EVENT_MESSAGE_OPT_OUT = 'message.opt_out';
+    public const EVENT_MESSAGE_OPT_IN = 'message.opt_in';
+    public const EVENT_VERIFICATION_CREATED = 'verification.created';
+    public const EVENT_VERIFICATION_DELIVERED = 'verification.delivered';
+    public const EVENT_VERIFICATION_VERIFIED = 'verification.verified';
+    public const EVENT_VERIFICATION_EXPIRED = 'verification.expired';
+    public const EVENT_VERIFICATION_FAILED = 'verification.failed';
+    public const EVENT_VERIFICATION_RESENT = 'verification.resent';
+    public const EVENT_VERIFICATION_DELIVERY_FAILED = 'verification.delivery_failed';
+    public const EVENT_CONVERSATION_CREATED = 'conversation.created';
+    public const EVENT_CONVERSATION_UPDATED = 'conversation.updated';
+    public const EVENT_DRAFT_CREATED = 'draft.created';
+    public const EVENT_DRAFT_APPROVED = 'draft.approved';
+    public const EVENT_DRAFT_REJECTED = 'draft.rejected';
     public const EVENT_CONTACT_AUTO_FLAGGED = 'contact.auto_flagged';
     public const EVENT_CONTACT_MARKED_VALID = 'contact.marked_valid';
     public const EVENT_CONTACTS_LOOKUP_COMPLETED = 'contacts.lookup_completed';
@@ -52,6 +67,12 @@ class Webhook
     public const EVENT_CAMPAIGN_SUSPENDED = 'campaign.suspended';
     public const EVENT_ASSIGNMENT_CONFIRMED = 'assignment.confirmed';
     public const EVENT_ASSIGNMENT_FAILED = 'assignment.failed';
+    public const EVENT_RCS_BRAND_VERIFIED = 'rcs_brand.verified';
+    public const EVENT_RCS_BRAND_FAILED = 'rcs_brand.failed';
+    public const EVENT_RCS_AGENT_TESTING = 'rcs_agent.testing';
+    public const EVENT_RCS_AGENT_LIVE = 'rcs_agent.live';
+    public const EVENT_RCS_AGENT_REJECTED = 'rcs_agent.rejected';
+    public const EVENT_RCS_AGENT_ACTION_REQUIRED = 'rcs_agent.action_required';
     public const EVENT_PORT_COMPLETED = 'port.completed';
     public const EVENT_PORT_OUT_REQUESTED = 'port_out.requested';
     public const EVENT_PORT_OUT_COMPLETED = 'port_out.completed';
@@ -61,6 +82,14 @@ class Webhook
     public const EVENT_NUMBER_FAILED = 'number.failed';
     public const EVENT_NUMBER_REQUIREMENTS_REQUIRED = 'number.requirements_required';
     public const EVENT_NUMBER_RELEASED = 'number.released';
+    public const EVENT_WHATSAPP_ACCOUNT_CONNECTED = 'whatsapp_account.connected';
+    public const EVENT_WHATSAPP_ACCOUNT_FAILED = 'whatsapp_account.failed';
+    public const EVENT_WHATSAPP_TEMPLATE_APPROVED = 'whatsapp_template.approved';
+    public const EVENT_WHATSAPP_TEMPLATE_REJECTED = 'whatsapp_template.rejected';
+    public const EVENT_WHATSAPP_TEMPLATE_PAUSED = 'whatsapp_template.paused';
+    public const EVENT_CALL_STARTED = 'call.started';
+    public const EVENT_CALL_COMPLETED = 'call.completed';
+    public const EVENT_CALL_RECORDING_READY = 'call.recording.ready';
 
     public const CIRCUIT_STATE_CLOSED = 'closed';
     public const CIRCUIT_STATE_OPEN = 'open';
