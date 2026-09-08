@@ -660,6 +660,74 @@ foreach ($eventTypes as $eventType) {
 }
 ```
 
+### Receiving webhook events
+
+`Webhooks::parseEvent()` verifies the signature and returns a `WebhookEvent`.
+
+```php
+use Sendly\Webhooks;
+use Sendly\WebhookVerificationData;
+use Sendly\Exceptions\WebhookSignatureException;
+
+try {
+    $event = Webhooks::parseEvent(
+        $rawRequestBody,
+        $_SERVER['HTTP_X_SENDLY_SIGNATURE'],
+        $webhookSecret,
+        $_SERVER['HTTP_X_SENDLY_TIMESTAMP'] ?? null
+    );
+} catch (WebhookSignatureException $e) {
+    http_response_code(401);
+    return;
+}
+```
+
+`$event->object` is `data.object` exactly as it arrived, for every event type.
+Keys are verbatim, nothing is defaulted, and a JSON `null` stays `null`:
+
+```php
+match ($event->type) {
+    'rcs_agent.live'             => activateAgent($event->object['agent_id']),
+    'whatsapp_template.approved' => touchTemplate($event->object['id'], $event->object['updatedAt']),
+    // call.* numbers are legitimately null for in-app calls
+    'call.completed'             => logCall($event->object['from'], $event->object['to']),
+    // the contact is `id`; the message that flagged it is `message_id`
+    'contact.auto_flagged'       => quarantine($event->object['id'], $event->object['message_id']),
+    default                      => null,
+};
+```
+
+`$event->data` is the *message* view of `data.object`. It is populated for
+`message.*` events and is **null for every other event type**, because their
+payload is not a message. Check it before reading through it:
+
+```php
+if ($event->data !== null) {
+    echo "{$event->data->id} is {$event->data->status}";
+}
+```
+
+Every field on `$event->data` is nullable and reflects what the payload
+carried. A field the event did not send is `null`, never a stand-in such as
+`''`, `1` or `'outbound'`.
+
+Typed views for other payloads come from `objectAs()`, which builds a class
+through its static `fromArray(array $data)` when it has one and otherwise
+through a constructor taking the array:
+
+```php
+$verification = $event->objectAs(WebhookVerificationData::class);
+// or, for verification.* events:
+$verification = $event->verification();
+
+echo $verification?->phone;
+```
+
+Other helpers: `$event->get('key', $default)` reads one key off
+`data.object` (`$default` applies only when the key is absent, so a `null` the
+server sent stays `null`), and `WebhookEvent::isMessageEvent($type)` tells you
+whether an event type carries a message.
+
 ## Account & Credits
 
 ```php

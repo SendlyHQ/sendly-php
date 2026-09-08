@@ -146,7 +146,15 @@ class ClientTest extends TestCase
 
     public function testClientConstants(): void
     {
-        $this->assertSame('3.38.0', Sendly::VERSION);
+        // Read the expected version from composer.json rather than hardcoding
+        // it. This assertion sat at '3.38.0' through the 3.39.0 release and
+        // failed on every run; pinning it to the manifest means a release can
+        // no longer leave it stale.
+        $manifest = json_decode(
+            file_get_contents(__DIR__ . '/../composer.json'),
+            true,
+        );
+        $this->assertSame($manifest['version'], Sendly::VERSION);
         $this->assertSame('https://sendly.live/api/v1', Sendly::DEFAULT_BASE_URL);
         $this->assertSame(30, Sendly::DEFAULT_TIMEOUT);
     }

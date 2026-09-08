@@ -2,7 +2,26 @@
 
 ## Unreleased
 
+### Breaking Changes
+
+- **`WebhookEvent` exposes `data.object` verbatim, and stops pretending every event is a message.** `parseEvent()` used to force `data.object` through `WebhookMessageData` whatever the event type, which is only right for `message.*`. Every other event — `rcs_*`, `whatsapp_*`, `call.*`, `brand.*`, `campaign.*`, `assignment.*`, `number.*`, `port*`, `contact*`, `conversation.*`, `draft.*`, `verification.*` and anything added after this release — came back as a message with its real fields dropped and message defaults in their place, so an RCS agent id, a call's timestamps or a port request id were simply unreachable.
+
+  `WebhookEvent::$object` is now the decoded `data.object` as an associative array, present for every event type, with keys and values exactly as they arrived. `WebhookEvent::$data` is the message view and is **`?WebhookMessageData`**: null for every non-`message.*` event. Code that read `$event->data->to` on a lifecycle event was reading an invented value; it must now branch on `$event->data !== null` or read `$event->object`. `WebhookEvent::isMessageEvent()`, `WebhookEvent::get()`, `WebhookEvent::objectAs()` and `WebhookEvent::verification()` are new.
+
+- **`WebhookMessageData` no longer invents field values, and every property is nullable.** `to` and `from` defaulted to `''`, `segments` to `1`, `credits_used` to `0` and `direction` to `'outbound'` when the payload carried none of them, which is indistinguishable from a real send of one segment to an empty number. A field the event did not carry is `null` now. `id`, `status`, `to`, `from` and `direction` are `?string`; `segments` and `creditsUsed` are `?int`. `getMessageId()` returns `?string`.
+
+- **A JSON `null` stays null.** `call.*` events legitimately carry `from` and `to` as null — that is every in-app call — and those used to arrive as `""`. `$event->object` and the message view both preserve null.
+
+- **`contact.auto_flagged` no longer reports the contact id as the message id.** The payload's `id` is the contact and its `message_id` is the message that flagged it; the old decoder read `id ?? message_id`, so a handler that acted on `$event->data->id` acted on the wrong row. Contact events have no message view at all now, and both ids are readable on `$event->object`.
+
+- **`WebhookVerificationData` is wired up rather than dead.** Reach it with `$event->verification()` on a `verification.*` event, or `$event->objectAs(WebhookVerificationData::class)`. Its fields are nullable and it no longer defaults `delivery_status` to `'queued'`, `attempts` to `0` or `max_attempts` to `3`; its constructor arguments all default to null.
+
 ### Minor Changes
+
+- **`whatsapp_template.*` timestamps survive.** The server sends `createdAt` and `updatedAt` on those events in camelCase as ISO-8601 strings, and the old snake_case-only decoder dropped both. They are on `$event->object` verbatim, and the message view now reads the camelCase spelling of `created_at`, `delivered_at`, `failed_at`, `organization_id`, `error_code`, `credits_used`, `message_format`, `media_urls`, `retry_count` and `batch_id` as a fallback.
+
+- **Both decode styles are accepted.** `WebhookEvent` and `WebhookMessageData` take an array or an object, so an envelope decoded with `json_decode($body)` and one decoded with `json_decode($body, true)` behave the same. `parseEvent()` itself decodes into arrays now.
+
 
 - **RCS registration over the API.** `$client->rcs` gains `registration->get()`, `dossier->get()`, `brands->create()` / `update()`, and `agents->create()` / `get()` / `update()` / `setTestDevices()` / `submit()` / `requestLaunch()`, mirroring the dashboard's RCS registration flow: draft a brand and an agent, submit them for review (Sendly first, then the carrier network), invite test devices, and request launch. Reads need an API key with the `rcs:read` scope, writes `rcs:write`. Logo, hero and call-to-action media must be public `https://` URLs; file upload stays dashboard-only. `agents->list()` rows now carry `stage`. The channel is still rolling out: while it is off for your account these endpoints throw `NotFoundException` (`rcs_not_enabled`). `RcsCustomerStage`, `RcsReviewStatus` and `RcsErrorCode` hold the string values the endpoints use.
 
