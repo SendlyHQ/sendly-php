@@ -60,7 +60,7 @@ class Contacts
             throw new ValidationException('Contact ID is required');
         }
 
-        return $this->client->get("/contacts/{$id}");
+        return $this->client->get("/contacts/" . rawurlencode($id));
     }
 
     /**
@@ -109,7 +109,7 @@ class Contacts
             'metadata' => $data['metadata'] ?? null,
         ], fn($v) => $v !== null);
 
-        return $this->client->patch("/contacts/{$id}", $body);
+        return $this->client->patch("/contacts/" . rawurlencode($id), $body);
     }
 
     /**
@@ -125,7 +125,7 @@ class Contacts
             throw new ValidationException('Contact ID is required');
         }
 
-        return $this->client->delete("/contacts/{$id}");
+        return $this->client->delete("/contacts/" . rawurlencode($id));
     }
 
     /**
@@ -147,7 +147,7 @@ class Contacts
             throw new ValidationException('Contact ID is required');
         }
 
-        return $this->client->post("/contacts/{$id}/mark-valid", []);
+        return $this->client->post("/contacts/" . rawurlencode($id) . "/mark-valid", []);
     }
 
     /**

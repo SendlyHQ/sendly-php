@@ -95,7 +95,7 @@ class Webhooks
             throw new ValidationException('Webhook ID is required');
         }
 
-        $response = $this->client->get("/webhooks/{$id}");
+        $response = $this->client->get("/webhooks/" . rawurlencode($id));
         $data = $response['webhook'] ?? $response['data'] ?? $response;
         return new Webhook($data);
     }
@@ -135,7 +135,7 @@ class Webhooks
             $payload['metadata'] = $updates['metadata'];
         }
 
-        $response = $this->client->patch("/webhooks/{$id}", $payload);
+        $response = $this->client->patch("/webhooks/" . rawurlencode($id), $payload);
         $data = $response['webhook'] ?? $response['data'] ?? $response;
         return new Webhook($data);
     }
@@ -153,7 +153,7 @@ class Webhooks
             throw new ValidationException('Webhook ID is required');
         }
 
-        $this->client->delete("/webhooks/{$id}");
+        $this->client->delete("/webhooks/" . rawurlencode($id));
         return true;
     }
 
@@ -170,7 +170,7 @@ class Webhooks
             throw new ValidationException('Webhook ID is required');
         }
 
-        $response = $this->client->post("/webhooks/{$id}/test");
+        $response = $this->client->post("/webhooks/" . rawurlencode($id) . "/test");
         return new WebhookTestResult($response);
     }
 
@@ -187,7 +187,7 @@ class Webhooks
             throw new ValidationException('Webhook ID is required');
         }
 
-        return $this->client->post("/webhooks/{$id}/reset-circuit");
+        return $this->client->post("/webhooks/" . rawurlencode($id) . "/reset-circuit");
     }
 
     /**
@@ -221,7 +221,7 @@ class Webhooks
             static fn ($v) => $v !== null,
         );
 
-        return $this->client->post("/webhooks/{$id}/redeliver", $body);
+        return $this->client->post("/webhooks/" . rawurlencode($id) . "/redeliver", $body);
     }
 
     /**
@@ -254,7 +254,7 @@ class Webhooks
             static fn ($v) => $v !== null,
         );
 
-        return $this->client->post("/webhooks/{$id}/backfill", $body);
+        return $this->client->post("/webhooks/" . rawurlencode($id) . "/backfill", $body);
     }
 
     /**
@@ -270,7 +270,7 @@ class Webhooks
             throw new ValidationException('Webhook ID is required');
         }
 
-        $response = $this->client->post("/webhooks/{$id}/rotate-secret");
+        $response = $this->client->post("/webhooks/" . rawurlencode($id) . "/rotate-secret");
         return new WebhookSecretRotation($response);
     }
 
@@ -293,7 +293,7 @@ class Webhooks
             'offset' => $options['offset'] ?? 0,
         ], fn($v) => $v !== null);
 
-        $response = $this->client->get("/webhooks/{$id}/deliveries", $params);
+        $response = $this->client->get("/webhooks/" . rawurlencode($id) . "/deliveries", $params);
         $deliveries = $response['deliveries'] ?? $response['data'] ?? $response;
 
         if (!is_array($deliveries)) {
@@ -320,7 +320,7 @@ class Webhooks
             throw new ValidationException('Delivery ID is required');
         }
 
-        $response = $this->client->get("/webhooks/{$webhookId}/deliveries/{$deliveryId}");
+        $response = $this->client->get("/webhooks/" . rawurlencode($webhookId) . "/deliveries/" . rawurlencode($deliveryId));
         $data = $response['delivery'] ?? $response['data'] ?? $response;
         return new WebhookDelivery($data);
     }
@@ -342,7 +342,7 @@ class Webhooks
             throw new ValidationException('Delivery ID is required');
         }
 
-        $response = $this->client->post("/webhooks/{$webhookId}/deliveries/{$deliveryId}/retry");
+        $response = $this->client->post("/webhooks/" . rawurlencode($webhookId) . "/deliveries/" . rawurlencode($deliveryId) . "/retry");
         $data = $response['delivery'] ?? $response['data'] ?? $response;
         return new WebhookDelivery($data);
     }

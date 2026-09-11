@@ -54,7 +54,7 @@ class Campaigns
             throw new ValidationException('Campaign ID is required');
         }
 
-        return $this->client->get("/campaigns/{$id}");
+        return $this->client->get("/campaigns/" . rawurlencode($id));
     }
 
     /**
@@ -110,7 +110,7 @@ class Campaigns
 
         $this->validateMessageType($data['messageType'] ?? null);
 
-        return $this->client->patch("/campaigns/{$id}", $data);
+        return $this->client->patch("/campaigns/" . rawurlencode($id), $data);
     }
 
     /**
@@ -126,7 +126,7 @@ class Campaigns
             throw new ValidationException('Campaign ID is required');
         }
 
-        return $this->client->delete("/campaigns/{$id}");
+        return $this->client->delete("/campaigns/" . rawurlencode($id));
     }
 
     /**
@@ -142,7 +142,7 @@ class Campaigns
             throw new ValidationException('Campaign ID is required');
         }
 
-        return $this->client->get("/campaigns/{$id}/preview");
+        return $this->client->get("/campaigns/" . rawurlencode($id) . "/preview");
     }
 
     /**
@@ -158,7 +158,7 @@ class Campaigns
             throw new ValidationException('Campaign ID is required');
         }
 
-        return $this->client->post("/campaigns/{$id}/send");
+        return $this->client->post("/campaigns/" . rawurlencode($id) . "/send");
     }
 
     /**
@@ -179,7 +179,7 @@ class Campaigns
             throw new ValidationException('Scheduled time is required');
         }
 
-        return $this->client->post("/campaigns/{$id}/schedule", [
+        return $this->client->post("/campaigns/" . rawurlencode($id) . "/schedule", [
             'scheduledAt' => $scheduledAt,
         ]);
     }
@@ -197,7 +197,7 @@ class Campaigns
             throw new ValidationException('Campaign ID is required');
         }
 
-        return $this->client->post("/campaigns/{$id}/cancel");
+        return $this->client->post("/campaigns/" . rawurlencode($id) . "/cancel");
     }
 
     /**
@@ -213,7 +213,7 @@ class Campaigns
             throw new ValidationException('Campaign ID is required');
         }
 
-        return $this->client->post("/campaigns/{$id}/pause");
+        return $this->client->post("/campaigns/" . rawurlencode($id) . "/pause");
     }
 
     /**
@@ -229,7 +229,7 @@ class Campaigns
             throw new ValidationException('Campaign ID is required');
         }
 
-        return $this->client->post("/campaigns/{$id}/resume");
+        return $this->client->post("/campaigns/" . rawurlencode($id) . "/resume");
     }
 
     /**
@@ -251,7 +251,7 @@ class Campaigns
             $data['name'] = $name;
         }
 
-        return $this->client->post("/campaigns/{$id}/clone", $data);
+        return $this->client->post("/campaigns/" . rawurlencode($id) . "/clone", $data);
     }
 
     /**
@@ -267,7 +267,7 @@ class Campaigns
             throw new ValidationException('Campaign ID is required');
         }
 
-        return $this->client->get("/campaigns/{$id}/stats");
+        return $this->client->get("/campaigns/" . rawurlencode($id) . "/stats");
     }
 
     /**
@@ -290,7 +290,7 @@ class Campaigns
             'status' => $options['status'] ?? null,
         ], fn($v) => $v !== null);
 
-        return $this->client->get("/campaigns/{$id}/recipients", $params);
+        return $this->client->get("/campaigns/" . rawurlencode($id) . "/recipients", $params);
     }
 
     /**

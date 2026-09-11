@@ -62,7 +62,7 @@ class WhatsAppSignup
             throw new ValidationException('Signup ID is required');
         }
 
-        return $this->client->get("/whatsapp/signup/{$id}");
+        return $this->client->get("/whatsapp/signup/" . rawurlencode($id));
     }
 
     /**
@@ -126,7 +126,7 @@ class WhatsAppSenders
     {
         $this->validatePhone($phoneNumber);
 
-        return $this->client->get("/whatsapp/senders/{$phoneNumber}/profile");
+        return $this->client->get("/whatsapp/senders/" . rawurlencode($phoneNumber) . "/profile");
     }
 
     /**
@@ -163,7 +163,7 @@ class WhatsAppSenders
             throw new ValidationException('Provide at least one profile field to update');
         }
 
-        return $this->client->patch("/whatsapp/senders/{$phoneNumber}/profile", $body);
+        return $this->client->patch("/whatsapp/senders/" . rawurlencode($phoneNumber) . "/profile", $body);
     }
 
     /**
@@ -306,7 +306,7 @@ class WhatsAppTemplates
             'examples' => $params['examples'] ?? null,
         ], fn($v) => $v !== null);
 
-        return $this->client->patch("/whatsapp/templates/{$id}", $body);
+        return $this->client->patch("/whatsapp/templates/" . rawurlencode($id), $body);
     }
 
     /**
@@ -326,7 +326,7 @@ class WhatsAppTemplates
             throw new ValidationException('Template ID is required');
         }
 
-        return $this->client->delete("/whatsapp/templates/{$id}");
+        return $this->client->delete("/whatsapp/templates/" . rawurlencode($id));
     }
 
     /**

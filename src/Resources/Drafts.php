@@ -89,7 +89,7 @@ class Drafts
             throw new ValidationException('Draft ID is required');
         }
 
-        return $this->client->get("/drafts/{$id}");
+        return $this->client->get("/drafts/" . rawurlencode($id));
     }
 
     /**
@@ -112,7 +112,7 @@ class Drafts
             'metadata' => $data['metadata'] ?? null,
         ], fn($v) => $v !== null);
 
-        return $this->client->patch("/drafts/{$id}", $body);
+        return $this->client->patch("/drafts/" . rawurlencode($id), $body);
     }
 
     /**
@@ -128,7 +128,7 @@ class Drafts
             throw new ValidationException('Draft ID is required');
         }
 
-        return $this->client->post("/drafts/{$id}/approve");
+        return $this->client->post("/drafts/" . rawurlencode($id) . "/approve");
     }
 
     /**
@@ -150,6 +150,6 @@ class Drafts
             $body['reason'] = $reason;
         }
 
-        return $this->client->post("/drafts/{$id}/reject", $body);
+        return $this->client->post("/drafts/" . rawurlencode($id) . "/reject", $body);
     }
 }

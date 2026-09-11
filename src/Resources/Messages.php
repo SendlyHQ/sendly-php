@@ -408,7 +408,7 @@ class Messages
             throw new ValidationException('Message ID is required');
         }
 
-        $response = $this->client->get("/messages/{$id}");
+        $response = $this->client->get("/messages/" . rawurlencode($id));
         $data = $response['data'] ?? $response['message'] ?? $response;
         return new Message($data);
     }
@@ -514,7 +514,7 @@ class Messages
             throw new ValidationException('Scheduled message ID is required');
         }
 
-        return $this->client->get("/messages/scheduled/{$id}");
+        return $this->client->get("/messages/scheduled/" . rawurlencode($id));
     }
 
     /**
@@ -530,7 +530,7 @@ class Messages
             throw new ValidationException('Scheduled message ID is required');
         }
 
-        return $this->client->delete("/messages/scheduled/{$id}");
+        return $this->client->delete("/messages/scheduled/" . rawurlencode($id));
     }
 
     /**
@@ -592,7 +592,7 @@ class Messages
             throw new ValidationException('Batch ID is required');
         }
 
-        return $this->client->get("/messages/batch/{$batchId}");
+        return $this->client->get("/messages/batch/" . rawurlencode($batchId));
     }
 
     /**

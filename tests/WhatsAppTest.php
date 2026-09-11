@@ -304,7 +304,7 @@ class WhatsAppTest extends TestCase
 
         $profile = $client->whatsapp()->senders->getProfile('+15559876543');
 
-        $this->assertSame('/api/v1/whatsapp/senders/+15559876543/profile', $capturedPath);
+        $this->assertSame('/api/v1/whatsapp/senders/%2B15559876543/profile', $capturedPath);
         $this->assertSame('+15559876543', $profile['phoneNumber']);
         $this->assertSame('Acme Coffee', $profile['displayName']);
         $this->assertSame('https://example.com/logo.png', $profile['profilePhotoUrl']);
@@ -356,7 +356,7 @@ class WhatsAppTest extends TestCase
             'website' => 'https://acme.example',
         ]);
 
-        $this->assertSame('/api/v1/whatsapp/senders/+15559876543/profile', $capturedPath);
+        $this->assertSame('/api/v1/whatsapp/senders/%2B15559876543/profile', $capturedPath);
         $this->assertSame('PATCH', $capturedMethod);
         $sentBody = json_decode($capturedBody, true);
         $this->assertSame('Now roasting decaf too.', $sentBody['about']);

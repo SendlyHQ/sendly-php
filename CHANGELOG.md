@@ -1,6 +1,8 @@
 # sendly/sendly-php
 
-## Unreleased
+## 4.0.0
+
+**Upgrading from 3.40.0:** that release already contained the breaking changes below, published by mistake as a minor version. 4.0.0 carries them under the correct major. Relative to 3.40.0, the only new changes are under **Security**.
 
 ### Breaking Changes
 
@@ -16,9 +18,76 @@
 
 - **`WebhookVerificationData` is wired up rather than dead.** Reach it with `$event->verification()` on a `verification.*` event, or `$event->objectAs(WebhookVerificationData::class)`. Its fields are nullable and it no longer defaults `delivery_status` to `'queued'`, `attempts` to `0` or `max_attempts` to `3`; its constructor arguments all default to null.
 
+### Migration
+
+Every handler that reaches through `$event->data` on a non-`message.*` event needs one
+edit. Take `rcs_agent.live`, whose `data.object` is
+`{"agent_id": "...", "name": "...", "stage": "live", "organization_id": "..."}`.
+
+**What your code does today, on 3.x:**
+
+```php
+$event = Webhooks::parseEvent($raw, $signature, $secret, $timestamp);
+
+if ($event->type === 'rcs_agent.live') {
+    activateAgent($event->data->id);      // '' — the payload has no `id`; the agent id was dropped
+    audit($event->data->direction);       // 'outbound' — invented, this event has no direction
+    meter($event->data->creditsUsed);     // 0 — invented, this event bills nothing
+}
+```
+
+Nothing raised, nothing was logged, and `$event->data` was a fully populated
+`WebhookMessageData` whose every value was a default rather than anything the event
+carried. `activateAgent('')` ran against an empty id.
+
+**What the same code does on 4.0.0:** `$event->data` is `null` here, so
+`$event->data->id` raises `Warning: Attempt to read property "id" on null` and
+evaluates to `null`; under an error handler that promotes warnings to exceptions
+(Laravel does by default, Symfony in debug mode) that is a hard failure, and
+`$event->data->getMessageId()` is an outright
+`Error: Call to a member function getMessageId() on null`. **That is the intended
+behaviour, not an oversight.** There is no correct message field to hand back
+for an event that carries no message, and the empty string it used to return was a
+wrong answer wearing the costume of a right one. Failing where the old release invented
+a value is the whole point of the major.
+
+**The edit:** read the lifecycle payload off `$event->object`, or `$event->get()`.
+
+```php
+if ($event->type === 'rcs_agent.live') {
+    activateAgent($event->object['agent_id']);
+    audit($event->get('stage'));
+}
+```
+
+Three more edits worth making at the same time:
+
+- **Guard message handlers.** `$event->data` is `?WebhookMessageData`, so branch on
+  `if ($event->data !== null)` or use `$event->data?->id`. `WebhookEvent::isMessageEvent($event->type)`
+  answers the same question ahead of the read.
+
+- **`contact.auto_flagged` was reporting the wrong record.** `$event->data->id` gave you
+  the *contact* id under a name that says message, so a handler keyed on it acted on the
+  wrong row. Both ids are on the raw object now, correctly named:
+
+  ```php
+  // Before: $event->data->id  — the contact id, called a message id
+  quarantine($event->object['id']);          // contact
+  reviewMessage($event->object['message_id']); // the message that flagged it
+  ```
+
+- **Message fields are nullable now.** `$event->data->to`, `->from`, `->id`, `->status`
+  and `->direction` are `?string`, and `->segments` and `->creditsUsed` are `?int`. Code
+  that passes them straight into a `string` or `int` parameter can now hit a `TypeError`
+  where it previously received `''`, `1`, `0` or `'outbound'`. That absence was always
+  there; only its visibility is new. Coalesce at your boundary if you need a value:
+  `$event->data->to ?? throw new RuntimeException('no recipient on ' . $event->type)`.
+
 ### Minor Changes
 
 - **`whatsapp_template.*` timestamps survive.** The server sends `createdAt` and `updatedAt` on those events in camelCase as ISO-8601 strings, and the old snake_case-only decoder dropped both. They are on `$event->object` verbatim, and the message view now reads the camelCase spelling of `created_at`, `delivered_at`, `failed_at`, `organization_id`, `error_code`, `credits_used`, `message_format`, `media_urls`, `retry_count` and `batch_id` as a fallback.
+
+- **`message.queued` and `message.undelivered` are not subscribable, and never were from this SDK.** The API emits neither, and rejects both with a `400` when you subscribe. PHP has never listed them among the `Webhook::EVENT_*` constants, so nothing was removed here; if you pass either string in a hand-written `events` array to `$client->webhooks()->create()` or `update()`, drop it or the whole call fails.
 
 - **Both decode styles are accepted.** `WebhookEvent` and `WebhookMessageData` take an array or an object, so an envelope decoded with `json_decode($body)` and one decoded with `json_decode($body, true)` behave the same. `parseEvent()` itself decodes into arrays now.
 
@@ -26,6 +95,12 @@
 - **RCS registration over the API.** `$client->rcs` gains `registration->get()`, `dossier->get()`, `brands->create()` / `update()`, and `agents->create()` / `get()` / `update()` / `setTestDevices()` / `submit()` / `requestLaunch()`, mirroring the dashboard's RCS registration flow: draft a brand and an agent, submit them for review (Sendly first, then the carrier network), invite test devices, and request launch. Reads need an API key with the `rcs:read` scope, writes `rcs:write`. Logo, hero and call-to-action media must be public `https://` URLs; file upload stays dashboard-only. `agents->list()` rows now carry `stage`. The channel is still rolling out: while it is off for your account these endpoints throw `NotFoundException` (`rcs_not_enabled`). `RcsCustomerStage`, `RcsReviewStatus` and `RcsErrorCode` hold the string values the endpoints use.
 
 - **`SendlyException::getApiErrorCode()`** returns the API's `error` code (`rcs_field_locked`, `insufficient_permissions`, ...) next to the message, on every typed exception. `ValidationException::getDetails()` now also carries the API's `errors` list (`[{path, message}]`) when a response has one instead of `details`.
+
+
+### Security
+
+- **Path parameters are percent-encoded.** Every id you pass is now encoded (`rawurlencode`) before it goes into the request path. An id containing `/`, `?` or `#` used to change which endpoint the request reached: an id of `../../account/keys` left its collection and hit another endpoint carrying your API key. Ordinary ids are sent byte-for-byte as before.
+- **Guzzle's floor is raised to 7.15.2** (`guzzlehttp/psr7` to 2.12.3), clearing nine advisories, including CVE-2026-69246 (a noncanonical host could bypass host-based checks) and CVE-2026-55568 (a silent HTTPS proxy downgrade to cleartext). If your application pins an older Guzzle 7, Composer will ask you to update it. Guzzle 8 is not supported yet: it moves `getResponse()` off `RequestException`.
 
 ## 3.38.0
 

@@ -49,7 +49,7 @@ class Templates
             throw new ValidationException('Template ID is required');
         }
 
-        return $this->client->get("/templates/{$id}");
+        return $this->client->get("/templates/" . rawurlencode($id));
     }
 
     /**
@@ -90,7 +90,7 @@ class Templates
             throw new ValidationException('Template ID is required');
         }
 
-        return $this->client->patch("/templates/{$id}", $data);
+        return $this->client->patch("/templates/" . rawurlencode($id), $data);
     }
 
     /**
@@ -106,7 +106,7 @@ class Templates
             throw new ValidationException('Template ID is required');
         }
 
-        return $this->client->post("/templates/{$id}/publish");
+        return $this->client->post("/templates/" . rawurlencode($id) . "/publish");
     }
 
     /**
@@ -123,7 +123,7 @@ class Templates
             throw new ValidationException('Template ID is required');
         }
 
-        return $this->client->post("/templates/{$id}/preview", [
+        return $this->client->post("/templates/" . rawurlencode($id) . "/preview", [
             'variables' => $variables,
         ]);
     }
@@ -141,7 +141,7 @@ class Templates
             throw new ValidationException('Template ID is required');
         }
 
-        return $this->client->delete("/templates/{$id}");
+        return $this->client->delete("/templates/" . rawurlencode($id));
     }
 
     /**
@@ -163,7 +163,7 @@ class Templates
             $data['name'] = $name;
         }
 
-        return $this->client->post("/templates/{$id}/clone", $data);
+        return $this->client->post("/templates/" . rawurlencode($id) . "/clone", $data);
     }
 
     /**

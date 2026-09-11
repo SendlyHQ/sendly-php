@@ -54,7 +54,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspace ID is required');
         }
 
-        return $this->client->get("/enterprise/workspaces/{$workspaceId}");
+        return $this->client->get("/enterprise/workspaces/" . rawurlencode($workspaceId));
     }
 
     /**
@@ -68,7 +68,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspace ID is required');
         }
 
-        $this->client->delete("/enterprise/workspaces/{$workspaceId}");
+        $this->client->delete("/enterprise/workspaces/" . rawurlencode($workspaceId));
         return true;
     }
 
@@ -114,7 +114,7 @@ class EnterpriseWorkspaces
             }
         }
 
-        return $this->client->post("/enterprise/workspaces/{$workspaceId}/verification/submit", $payload);
+        return $this->client->post("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/verification/submit", $payload);
     }
 
     /**
@@ -152,7 +152,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Source workspace ID is required');
         }
 
-        return $this->client->post("/enterprise/workspaces/{$workspaceId}/verification/inherit", [
+        return $this->client->post("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/verification/inherit", [
             'source_workspace_id' => $options['sourceWorkspaceId'],
         ]);
     }
@@ -168,7 +168,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspace ID is required');
         }
 
-        return $this->client->get("/enterprise/workspaces/{$workspaceId}/verification");
+        return $this->client->get("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/verification");
     }
 
     /**
@@ -191,7 +191,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Amount must be a positive number');
         }
 
-        return $this->client->post("/enterprise/workspaces/{$workspaceId}/transfer-credits", [
+        return $this->client->post("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/transfer-credits", [
             'source_workspace_id' => $options['sourceWorkspaceId'],
             'amount' => $options['amount'],
         ]);
@@ -208,7 +208,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspace ID is required');
         }
 
-        return $this->client->get("/enterprise/workspaces/{$workspaceId}/credits");
+        return $this->client->get("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/credits");
     }
 
     /**
@@ -231,7 +231,7 @@ class EnterpriseWorkspaces
             $payload['type'] = $options['type'];
         }
 
-        return $this->client->post("/enterprise/workspaces/{$workspaceId}/keys", $payload);
+        return $this->client->post("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/keys", $payload);
     }
 
     /**
@@ -245,7 +245,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspace ID is required');
         }
 
-        $response = $this->client->get("/enterprise/workspaces/{$workspaceId}/keys");
+        $response = $this->client->get("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/keys");
         $keys = $response['keys'] ?? $response['data'] ?? $response;
 
         if (!is_array($keys)) {
@@ -271,7 +271,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Key ID is required');
         }
 
-        $this->client->delete("/enterprise/workspaces/{$workspaceId}/keys/{$keyId}");
+        $this->client->delete("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/keys/" . rawurlencode($keyId));
         return true;
     }
 
@@ -286,7 +286,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspace ID is required');
         }
 
-        return $this->client->get("/enterprise/workspaces/{$workspaceId}/opt-in-pages");
+        return $this->client->get("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/opt-in-pages");
     }
 
     /**
@@ -316,7 +316,7 @@ class EnterpriseWorkspaces
             $payload['sampleMessages'] = $options['sampleMessages'];
         }
 
-        return $this->client->post("/enterprise/workspaces/{$workspaceId}/opt-in-pages", $payload);
+        return $this->client->post("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/opt-in-pages", $payload);
     }
 
     /**
@@ -353,7 +353,7 @@ class EnterpriseWorkspaces
             $payload['customBenefits'] = $options['customBenefits'];
         }
 
-        return $this->client->patch("/enterprise/workspaces/{$workspaceId}/opt-in-pages/{$pageId}", $payload);
+        return $this->client->patch("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/opt-in-pages/" . rawurlencode($pageId), $payload);
     }
 
     /**
@@ -372,7 +372,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Page ID is required');
         }
 
-        $this->client->delete("/enterprise/workspaces/{$workspaceId}/opt-in-pages/{$pageId}");
+        $this->client->delete("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/opt-in-pages/" . rawurlencode($pageId));
         return true;
     }
 
@@ -400,7 +400,7 @@ class EnterpriseWorkspaces
             $payload['description'] = $options['description'];
         }
 
-        return $this->client->put("/enterprise/workspaces/{$workspaceId}/webhooks", $payload);
+        return $this->client->put("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/webhooks", $payload);
     }
 
     /**
@@ -414,7 +414,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspace ID is required');
         }
 
-        return $this->client->get("/enterprise/workspaces/{$workspaceId}/webhooks");
+        return $this->client->get("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/webhooks");
     }
 
     /**
@@ -429,7 +429,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspace ID is required');
         }
 
-        $path = "/enterprise/workspaces/{$workspaceId}/webhooks";
+        $path = "/enterprise/workspaces/" . rawurlencode($workspaceId) . "/webhooks";
         if ($webhookId !== null) {
             $path .= '?' . http_build_query(['webhookId' => $webhookId]);
         }
@@ -449,7 +449,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspace ID is required');
         }
 
-        return $this->client->post("/enterprise/workspaces/{$workspaceId}/webhooks/test");
+        return $this->client->post("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/webhooks/test");
     }
 
     /**
@@ -469,7 +469,7 @@ class EnterpriseWorkspaces
             $payload['reason'] = $reason;
         }
 
-        return $this->client->post("/enterprise/workspaces/{$workspaceId}/suspend", $payload);
+        return $this->client->post("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/suspend", $payload);
     }
 
     /**
@@ -483,7 +483,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspace ID is required');
         }
 
-        return $this->client->post("/enterprise/workspaces/{$workspaceId}/resume");
+        return $this->client->post("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/resume");
     }
 
     /**
@@ -527,7 +527,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Domain is required');
         }
 
-        return $this->client->put("/enterprise/workspaces/{$workspaceId}/pages/{$pageId}/domain", [
+        return $this->client->put("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/pages/" . rawurlencode($pageId) . "/domain", [
             'domain' => $domain,
         ]);
     }
@@ -552,7 +552,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Role is required');
         }
 
-        return $this->client->post("/enterprise/workspaces/{$workspaceId}/invitations", [
+        return $this->client->post("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/invitations", [
             'email' => $options['email'],
             'role' => $options['role'],
         ]);
@@ -569,7 +569,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspace ID is required');
         }
 
-        return $this->client->get("/enterprise/workspaces/{$workspaceId}/invitations");
+        return $this->client->get("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/invitations");
     }
 
     /**
@@ -588,7 +588,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Invitation ID is required');
         }
 
-        $this->client->delete("/enterprise/workspaces/{$workspaceId}/invitations/{$inviteId}");
+        $this->client->delete("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/invitations/" . rawurlencode($inviteId));
         return true;
     }
 
@@ -603,7 +603,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspace ID is required');
         }
 
-        return $this->client->get("/enterprise/workspaces/{$workspaceId}/quota");
+        return $this->client->get("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/quota");
     }
 
     /**
@@ -618,7 +618,7 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspace ID is required');
         }
 
-        return $this->client->put("/enterprise/workspaces/{$workspaceId}/quota", [
+        return $this->client->put("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/quota", [
             'monthlyMessageQuota' => $monthlyMessageQuota,
         ]);
     }

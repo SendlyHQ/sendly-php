@@ -728,6 +728,71 @@ Other helpers: `$event->get('key', $default)` reads one key off
 server sent stays `null`), and `WebhookEvent::isMessageEvent($type)` tells you
 whether an event type carries a message.
 
+### Handling a lifecycle event
+
+Lifecycle events — `rcs_*`, `whatsapp_*`, `call.*`, `brand.*`, `campaign.*`,
+`assignment.*`, `number.*`, `port*`, `contact*` — carry their own object at
+`data.object`, not a message. Read them off `$event->object`; `$event->data` is
+`null` for all of them. A complete endpoint:
+
+```php
+<?php
+// public/sendly-webhook.php
+
+require __DIR__ . '/../vendor/autoload.php';
+
+use Sendly\Webhooks;
+use Sendly\Exceptions\WebhookSignatureException;
+
+$raw = file_get_contents('php://input') ?: '';
+
+try {
+    $event = Webhooks::parseEvent(
+        $raw,
+        $_SERVER['HTTP_X_SENDLY_SIGNATURE'] ?? '',
+        getenv('SENDLY_WEBHOOK_SECRET') ?: '',
+        $_SERVER['HTTP_X_SENDLY_TIMESTAMP'] ?? null
+    );
+} catch (WebhookSignatureException $e) {
+    http_response_code(401);
+    exit;
+}
+
+switch ($event->type) {
+    // Lifecycle: data.object is an RCS agent.
+    // {"agent_id": "...", "name": "...", "stage": "live", "organization_id": "..."}
+    case 'rcs_agent.live':
+        $agentId = $event->object['agent_id']; // verbatim, nothing defaulted
+        $stage   = $event->get('stage');       // null when the key is absent
+        error_log("RCS agent {$agentId} reached {$stage}");
+        // $event->data is null here. An agent is not a message.
+        break;
+
+    // Lifecycle: a call. from/to are legitimately null for in-app calls.
+    case 'call.completed':
+        error_log(sprintf(
+            'call %s ran %d s',
+            $event->object['id'],
+            $event->object['duration_secs'] ?? 0
+        ));
+        break;
+
+    // Message event: the typed view is populated, so use it.
+    case 'message.delivered':
+        if ($event->data !== null) {
+            error_log("{$event->data->id} delivered to {$event->data->to}");
+        }
+        break;
+}
+
+http_response_code(200);
+```
+
+Reaching through `$event->data` on one of these events is the mistake this release
+makes visible: on 3.x it handed back `''`, `0`, `1` or `'outbound'` and raised
+nothing, so `$event->data->id` on `rcs_agent.live` silently acted on an empty id.
+`$event->data` is `null` there now.
+
 ## Account & Credits
 
 ```php

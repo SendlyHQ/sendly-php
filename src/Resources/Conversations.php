@@ -56,7 +56,7 @@ class Conversations
             'message_offset' => $options['messageOffset'] ?? null,
         ], fn($v) => $v !== null);
 
-        return $this->client->get("/conversations/{$id}", $params);
+        return $this->client->get("/conversations/" . rawurlencode($id), $params);
     }
 
     /**
@@ -92,7 +92,7 @@ class Conversations
             $payload['mediaUrls'] = $options['mediaUrls'];
         }
 
-        return $this->client->post("/conversations/{$id}/messages", $payload);
+        return $this->client->post("/conversations/" . rawurlencode($id) . "/messages", $payload);
     }
 
     /**
@@ -114,7 +114,7 @@ class Conversations
             'tags' => $data['tags'] ?? null,
         ], fn($v) => $v !== null);
 
-        return $this->client->patch("/conversations/{$id}", $body);
+        return $this->client->patch("/conversations/" . rawurlencode($id), $body);
     }
 
     /**
@@ -130,7 +130,7 @@ class Conversations
             throw new ValidationException('Conversation ID is required');
         }
 
-        return $this->client->post("/conversations/{$id}/close");
+        return $this->client->post("/conversations/" . rawurlencode($id) . "/close");
     }
 
     /**
@@ -146,7 +146,7 @@ class Conversations
             throw new ValidationException('Conversation ID is required');
         }
 
-        return $this->client->post("/conversations/{$id}/reopen");
+        return $this->client->post("/conversations/" . rawurlencode($id) . "/reopen");
     }
 
     /**
@@ -162,7 +162,7 @@ class Conversations
             throw new ValidationException('Conversation ID is required');
         }
 
-        return $this->client->post("/conversations/{$id}/mark-read");
+        return $this->client->post("/conversations/" . rawurlencode($id) . "/mark-read");
     }
 
     /**
@@ -183,7 +183,7 @@ class Conversations
             throw new ValidationException('Label IDs are required');
         }
 
-        return $this->client->post("/conversations/{$id}/labels", [
+        return $this->client->post("/conversations/" . rawurlencode($id) . "/labels", [
             'labelIds' => $labelIds,
         ]);
     }
@@ -206,7 +206,7 @@ class Conversations
             throw new ValidationException('Label ID is required');
         }
 
-        return $this->client->delete("/conversations/{$id}/labels/{$labelId}");
+        return $this->client->delete("/conversations/" . rawurlencode($id) . "/labels/" . rawurlencode($labelId));
     }
 
     /**
@@ -228,7 +228,7 @@ class Conversations
             $params['max_messages'] = $maxMessages;
         }
 
-        return $this->client->get("/conversations/{$id}/context", $params);
+        return $this->client->get("/conversations/" . rawurlencode($id) . "/context", $params);
     }
 
     /**
@@ -244,6 +244,6 @@ class Conversations
             throw new ValidationException('Conversation ID is required');
         }
 
-        return $this->client->post("/conversations/{$id}/suggest-replies");
+        return $this->client->post("/conversations/" . rawurlencode($id) . "/suggest-replies");
     }
 }

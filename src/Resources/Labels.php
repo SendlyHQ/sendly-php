@@ -69,6 +69,6 @@ class Labels
             throw new ValidationException('Label ID is required');
         }
 
-        return $this->client->delete("/labels/{$id}");
+        return $this->client->delete("/labels/" . rawurlencode($id));
     }
 }

@@ -77,7 +77,7 @@ class Rules
             throw new ValidationException('Rule ID is required');
         }
 
-        return $this->client->patch("/rules/{$id}", $data);
+        return $this->client->patch("/rules/" . rawurlencode($id), $data);
     }
 
     /**
@@ -93,6 +93,6 @@ class Rules
             throw new ValidationException('Rule ID is required');
         }
 
-        return $this->client->delete("/rules/{$id}");
+        return $this->client->delete("/rules/" . rawurlencode($id));
     }
 }

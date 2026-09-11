@@ -46,7 +46,7 @@ class ContactLists
             throw new ValidationException('Contact list ID is required');
         }
 
-        return $this->client->get("/contact-lists/{$id}");
+        return $this->client->get("/contact-lists/" . rawurlencode($id));
     }
 
     /**
@@ -85,7 +85,7 @@ class ContactLists
             throw new ValidationException('Contact list ID is required');
         }
 
-        return $this->client->patch("/contact-lists/{$id}", $data);
+        return $this->client->patch("/contact-lists/" . rawurlencode($id), $data);
     }
 
     /**
@@ -101,7 +101,7 @@ class ContactLists
             throw new ValidationException('Contact list ID is required');
         }
 
-        return $this->client->delete("/contact-lists/{$id}");
+        return $this->client->delete("/contact-lists/" . rawurlencode($id));
     }
 
     /**
@@ -122,7 +122,7 @@ class ContactLists
             throw new ValidationException('At least one contact ID is required');
         }
 
-        return $this->client->post("/contact-lists/{$listId}/contacts", [
+        return $this->client->post("/contact-lists/" . rawurlencode($listId) . "/contacts", [
             'contact_ids' => $contactIds,
         ]);
     }
@@ -145,7 +145,7 @@ class ContactLists
             throw new ValidationException('Contact ID is required');
         }
 
-        return $this->client->delete("/contact-lists/{$listId}/contacts/{$contactId}");
+        return $this->client->delete("/contact-lists/" . rawurlencode($listId) . "/contacts/" . rawurlencode($contactId));
     }
 
     /**

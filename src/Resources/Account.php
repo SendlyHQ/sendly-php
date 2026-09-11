@@ -145,7 +145,7 @@ class Account
             $payload['gracePeriodHours'] = $options['gracePeriodHours'];
         }
 
-        return $this->client->post("/account/keys/{$id}/rotate", $payload);
+        return $this->client->post("/account/keys/" . rawurlencode($id) . "/rotate", $payload);
     }
 
     /**
@@ -161,7 +161,7 @@ class Account
             throw new ValidationException('API key ID is required');
         }
 
-        $response = $this->client->get("/account/keys/{$id}");
+        $response = $this->client->get("/account/keys/" . rawurlencode($id));
         $data = $response['api_key'] ?? $response['apiKey'] ?? $response['data'] ?? $response;
         return new ApiKey($data);
     }
@@ -179,7 +179,7 @@ class Account
             throw new ValidationException('API key ID is required');
         }
 
-        $response = $this->client->get("/account/keys/{$id}/usage");
+        $response = $this->client->get("/account/keys/" . rawurlencode($id) . "/usage");
         return $response['usage'] ?? $response['data'] ?? $response;
     }
 
@@ -196,7 +196,7 @@ class Account
             throw new ValidationException('API key ID is required');
         }
 
-        $this->client->patch("/account/keys/{$id}/revoke");
+        $this->client->patch("/account/keys/" . rawurlencode($id) . "/revoke");
         return true;
     }
 

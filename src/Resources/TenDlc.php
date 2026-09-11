@@ -124,7 +124,7 @@ class TenDlc
             throw new ValidationException('Brand ID is required');
         }
 
-        return $this->client->get("/tendlc/brands/{$id}");
+        return $this->client->get("/tendlc/brands/" . rawurlencode($id));
     }
 
     /**
@@ -148,7 +148,7 @@ class TenDlc
             throw new ValidationException('Use case is required');
         }
 
-        return $this->client->get("/tendlc/brands/{$brandId}/qualify/{$useCase}");
+        return $this->client->get("/tendlc/brands/" . rawurlencode($brandId) . "/qualify/" . rawurlencode($useCase));
     }
 
     /**
@@ -248,7 +248,7 @@ class TenDlc
             throw new ValidationException('Campaign ID is required');
         }
 
-        return $this->client->get("/tendlc/campaigns/{$id}");
+        return $this->client->get("/tendlc/campaigns/" . rawurlencode($id));
     }
 
     /**
@@ -276,7 +276,7 @@ class TenDlc
             throw new ValidationException('phoneNumber is required');
         }
 
-        return $this->client->post("/tendlc/campaigns/{$campaignId}/assign", [
+        return $this->client->post("/tendlc/campaigns/" . rawurlencode($campaignId) . "/assign", [
             'phoneNumber' => $phoneNumber,
         ]);
     }

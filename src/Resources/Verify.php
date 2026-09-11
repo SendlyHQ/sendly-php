@@ -98,7 +98,7 @@ class Verify
      */
     public function resend(string $id): array
     {
-        return $this->client->post("/verify/{$id}/resend");
+        return $this->client->post("/verify/" . rawurlencode($id) . "/resend");
     }
 
     /**
@@ -116,7 +116,7 @@ class Verify
      */
     public function check(string $id, string $code): array
     {
-        return $this->client->post("/verify/{$id}/check", ['code' => $code]);
+        return $this->client->post("/verify/" . rawurlencode($id) . "/check", ['code' => $code]);
     }
 
     /**
@@ -141,7 +141,7 @@ class Verify
      */
     public function get(string $id): array
     {
-        return $this->client->get("/verify/{$id}");
+        return $this->client->get("/verify/" . rawurlencode($id));
     }
 
     /**
