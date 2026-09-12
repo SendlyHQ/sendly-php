@@ -90,6 +90,10 @@ class Webhook
     public const EVENT_CALL_STARTED = 'call.started';
     public const EVENT_CALL_COMPLETED = 'call.completed';
     public const EVENT_CALL_RECORDING_READY = 'call.recording.ready';
+    public const EVENT_SHORT_CODE_ACTION_REQUIRED = 'short_code.action_required';
+    public const EVENT_SHORT_CODE_REJECTED = 'short_code.rejected';
+    public const EVENT_SHORT_CODE_FILED = 'short_code.filed';
+    public const EVENT_SHORT_CODE_LIVE = 'short_code.live';
 
     public const CIRCUIT_STATE_CLOSED = 'closed';
     public const CIRCUIT_STATE_OPEN = 'open';
