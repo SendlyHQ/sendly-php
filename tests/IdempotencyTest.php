@@ -14,6 +14,7 @@ use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Psr7\Request;
 use Sendly\Sendly;
+use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\ValidationException;
 use ReflectionClass;
 
@@ -253,7 +254,7 @@ class IdempotencyTest extends TestCase
         $this->assertSame($second, $third);
     }
 
-    public function testKeyKeptAcrossNonServerErrorRetry(): void
+    public function testClientErrorIsNotRetried(): void
     {
         $client = $this->createMockClient([
             new RequestException(
@@ -264,11 +265,15 @@ class IdempotencyTest extends TestCase
             $this->messageResponse(),
         ]);
 
-        $message = $client->messages()->send('+15551234567', 'Hello!');
+        try {
+            $client->messages()->send('+15551234567', 'Hello!');
+            $this->fail('Expected SendlyException');
+        } catch (SendlyException $e) {
+            $this->assertSame(409, $e->getCode());
+        }
 
-        $this->assertSame('msg_123', $message->id);
-        $this->assertCount(2, $this->history);
-        $this->assertSame($this->keyOfRequest(0), $this->keyOfRequest(1));
+        $this->assertCount(1, $this->history);
+        $this->assertMatchesRegularExpression(self::AUTO_KEY_PATTERN, (string) $this->keyOfRequest(0));
     }
 
     public function testKeyRotatedOnServerErrorForMediaUpload(): void

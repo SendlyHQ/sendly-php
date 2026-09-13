@@ -26,6 +26,7 @@ use Sendly\Resources\TenDlc;
 use Sendly\Resources\Links;
 use Sendly\Resources\WhatsApp;
 use Sendly\Resources\Rcs;
+use Sendly\Resources\Calls;
 use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\AuthenticationException;
 use Sendly\Exceptions\RateLimitException;
@@ -78,6 +79,7 @@ class Sendly
     public Links $links;
     public WhatsApp $whatsapp;
     public Rcs $rcs;
+    public Calls $calls;
 
     /**
      * Create a new Sendly client
@@ -118,6 +120,7 @@ class Sendly
         $this->links = new Links($this);
         $this->whatsapp = new WhatsApp($this);
         $this->rcs = new Rcs($this);
+        $this->calls = new Calls($this);
     }
 
     /**
@@ -308,6 +311,16 @@ class Sendly
     public function rcs(): Rcs
     {
         return $this->rcs;
+    }
+
+    /**
+     * Get the Calls resource
+     *
+     * @return Calls
+     */
+    public function calls(): Calls
+    {
+        return $this->calls;
     }
 
     /**
@@ -516,12 +529,8 @@ class Sendly
             } catch (RequestException $e) {
                 $lastException = $this->handleRequestException($e);
 
-                // Don't retry certain errors - throw immediately
-                if ($lastException instanceof AuthenticationException ||
-                    $lastException instanceof ValidationException ||
-                    $lastException instanceof NotFoundException ||
-                    $lastException instanceof InsufficientCreditsException ||
-                    $lastException instanceof RateLimitException) {
+                // A 4xx is the server refusing the request as sent - throw immediately
+                if ($lastException->getCode() >= 400 && $lastException->getCode() < 500) {
                     throw $lastException;
                 }
 

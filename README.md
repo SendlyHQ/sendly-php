@@ -75,6 +75,10 @@ $client = new Sendly('sk_live_v1_xxx', [
 ]);
 ```
 
+`maxRetries` (default 3) applies to connection failures, timeouts and 5xx
+responses, with exponential backoff between attempts. A 4xx response throws
+straight away.
+
 ## Messages
 
 ### Send an SMS
@@ -619,6 +623,107 @@ $client->messages()->send([
     'fallbackToSms' => false,
 ]);
 ```
+
+## Voice Calls
+
+Place a phone call that one of your workspace's AI agents handles, follow it
+while it rings and runs, end it early, and fetch the recording afterwards.
+Agents, which numbers take calls and how they answer, and emergency addresses
+are all set up in the dashboard under Calls; `$client->numbers()->list()`
+reports `voiceEnabled` and `voiceMode` on each number so you can pick one to
+call from.
+
+> **Note:** Calls are prepaid from your credit balance per started minute:
+> 2 credits a minute outbound plus 8 credits a minute while an AI agent is on
+> the call (10 credits a minute in total), US and Canada only, and unanswered
+> calls cost nothing. The `from` number must be voice-enabled in the dashboard
+> and have an emergency address registered. Voice is enabled workspace by
+> workspace; until it is on for your account the endpoints throw
+> `NotFoundException` (`voice_not_enabled`). Reads need the `calls:read`
+> scope, writes `calls:write` and a live key.
+
+```php
+use Sendly\Resources\CallStatus;
+use Sendly\Resources\CallRecordingStatus;
+use Sendly\Exceptions\InsufficientCreditsException;
+use Sendly\Exceptions\SendlyException;
+
+// Place a call. The agent speaks first; `context` steers what it says on
+// this call only, and `metadata` comes back on every read and webhook.
+try {
+    $call = $client->calls()->create([
+        'to' => '+15555550123',
+        'agentId' => '3c4d5e6f-7081-4293-a4b5-c6d7e8f90a1b',
+        'from' => '+15555550188', // optional when only one number is voice-enabled
+        'context' => 'You are calling Jordan to confirm the 3pm appointment on Tuesday.',
+        'metadata' => ['crmId' => 'lead_8812'],
+    ]);
+    echo $call['id'];     // "6f1c2d3e-..."
+    echo $call['status']; // "ringing"
+} catch (InsufficientCreditsException $e) {
+    // Top up: the balance cannot cover one minute at the agent rate
+} catch (SendlyException $e) {
+    // 428 e911_required: register an emergency address for the number first
+    // 409 lines_busy: every line is in use, retry in a moment
+    echo $e->getCode() . ' ' . $e->getApiErrorCode();
+}
+
+// Follow the call. Agent-handled calls carry a transcript once fetched by id.
+$call = $client->calls()->get($call['id']);
+if ($call['status'] === CallStatus::COMPLETED) {
+    echo "{$call['durationSecs']}s, {$call['creditsCharged']} credits, ended: {$call['hangupClass']}\n";
+    foreach ($call['transcript'] ?? [] as $line) {
+        echo "[{$line['speaker']}] {$line['text']}\n";
+    }
+}
+
+// List calls, newest first, with filters and pagination
+$result = $client->calls()->list([
+    'status' => CallStatus::COMPLETED,
+    'direction' => 'outbound',
+    'agentId' => '3c4d5e6f-7081-4293-a4b5-c6d7e8f90a1b',
+    'limit' => 20,
+]);
+foreach ($result['data'] as $c) {
+    echo "{$c['from']} -> {$c['to']} {$c['status']}\n";
+}
+if ($result['pagination']['hasMore']) {
+    // fetch the next page with 'offset' => $result['pagination']['offset'] + $result['pagination']['limit']
+}
+
+// End a call early. Ringing -> cancelled, active -> completed; a call that
+// has already ended is returned unchanged.
+$client->calls()->hangup($call['id']);
+
+// Fetch the recording. The URL is signed and valid for five minutes.
+$recording = $client->calls()->recording($call['id']);
+if ($recording['status'] === CallRecordingStatus::READY) {
+    file_put_contents('call.ogg', file_get_contents($recording['url']));
+}
+```
+
+| Method | Endpoint | Scope | Description |
+| --- | --- | --- | --- |
+| `calls()->create($params, $idempotencyKey = null)` | `POST /calls` | `calls:write` | Place a call handled by an AI agent. `to` and `agentId` required; `from`, `context`, `metadata` optional. |
+| `calls()->list($options = [])` | `GET /calls` | `calls:read` | List calls. `limit`, `offset`, `status`, `direction`, `kind`, `agentId`, `to`, `from`. Returns `data` and `pagination` (`total`, `limit`, `offset`, `hasMore`). |
+| `calls()->get($id)` | `GET /calls/{id}` | `calls:read` | One call, plus `transcript` on agent-handled calls. |
+| `calls()->hangup($id, $idempotencyKey = null)` | `POST /calls/{id}/hangup` | `calls:write` | End a ringing or active call. |
+| `calls()->recording($id)` | `GET /calls/{id}/recording` | `calls:read` | `status` (`none`, `recording`, `ready`, `failed`), `url` and `expiresAt` (set when `ready`), `contentType` (`audio/ogg`). |
+
+`CallStatus`, `CallDirection`, `CallKind`, `CallHandledBy`, `CallBilling`,
+`CallRecordingStatus` and `CallErrorCode` in `Sendly\Resources` hold the string
+values the endpoints use. A call's `billing` is `metered` while a phone call is
+charged per minute, `settled` once it has ended, and `unbilled` for calls that
+were never charged (browser-to-browser calls between teammates are free).
+`hangupClass` says why a call ended: `normal`, `caller_hung_up`,
+`callee_hung_up` and `agent_agent_hangup` are ordinary endings; `ring_timeout`,
+`callee_busy`, `callee_declined` and `caller_cancelled` mean it never
+connected; `max_duration` (60 minutes) and `credits_exhausted` mean the
+platform cut it short.
+
+The `call.started`, `call.completed` and `call.recording.ready` webhooks carry
+the call at `$event->object` in snake_case (`handled_by`, `duration_secs`,
+`credits_charged`, `hangup_class`, `recording_status`, `billing`, `metadata`).
 
 ## Webhooks
 

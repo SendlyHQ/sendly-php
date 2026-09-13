@@ -1,5 +1,15 @@
 # sendly/sendly-php
 
+## Unreleased
+
+### Minor Changes
+
+- **Voice calls over the API.** `$client->calls` (and `$client->calls()`) gains `create()`, `list()`, `get()`, `hangup()` and `recording()` against `/api/v1/calls`: place a phone call that one of your workspace's AI agents handles (`to` and `agentId` required; `from` when more than one number is voice-enabled; optional `context` for the agent and a string `metadata` map that comes back on every read and every `call.*` webhook), list calls newest first with `status` / `direction` / `kind` / `agentId` / `to` / `from` filters and `pagination.hasMore`, fetch one call (agent-handled calls carry `transcript`), end a ringing or active call, and fetch the recording (`url` and `expiresAt` are set only while `status` is `ready`; the signed URL lasts five minutes). Reads need an API key with the `calls:read` scope, writes `calls:write` and a live key. Both POSTs carry an `Idempotency-Key` and accept your own. Calls are prepaid per started minute (10 credits a minute for an agent-handled outbound call) to US and Canadian numbers; until voice is enabled for your account the endpoints throw `NotFoundException` (`voice_not_enabled`). `CallStatus`, `CallDirection`, `CallKind`, `CallHandledBy`, `CallBilling`, `CallRecordingStatus` and `CallErrorCode` hold the string values the endpoints use; a 402 `insufficient_credits` arrives as `InsufficientCreditsException`, a 428 `e911_required` or 409 `lines_busy` as `SendlyException` with `getCode()` and `getApiErrorCode()` set.
+
+### Patch Changes
+
+- **4xx responses are no longer retried.** The client used to retry every status it had no typed exception for, so a 409 `lines_busy`, 428 `e911_required`, 403 `live_key_required` or 409 `rcs_field_locked` went through the full backoff (three more attempts, about seven seconds) before the `SendlyException` reached you. Any 4xx now throws at once; connection failures, timeouts and 5xx responses retry as before. If you were passing `'maxRetries' => 0` to get the refusal quickly, you can drop it.
+
 ## 4.0.0
 
 **Upgrading from 3.40.0:** that release already contained the breaking changes below, published by mistake as a minor version. 4.0.0 carries them under the correct major. Relative to 3.40.0, the only new changes are under **Security**.
