@@ -18,6 +18,8 @@ class Message
     public const STATUS_FAILED = 'failed';
     public const STATUS_BOUNCED = 'bounced';
     public const STATUS_RETRYING = 'retrying';
+    public const STATUS_READ = 'read';
+    public const STATUS_RECEIVED = 'received';
 
     public const DIRECTION_OUTBOUND = 'outbound';
     public const DIRECTION_INBOUND = 'inbound';
