@@ -1,5 +1,17 @@
 # sendly/sendly-php
 
+## 4.2.0
+
+### Minor Changes
+
+- **Voice configuration over the API.** `$client->voice` (and `$client->voice()`) configures everything a phone call depends on. `voice->numbers` gains `list()`, `get($number)`, `update($number, $params)` and `registerEmergencyAddress($number, $params)`: switch voice on for a number, choose how it answers (`voiceMode` `none`, `ring_dashboard` or `agent`, with `agentId`), and register the emergency address a US or Canadian number needs before it can place calls ($1.50 a month; registering again replaces the address without a second charge). `$number` is the number's id or its E.164 phone number. `voice->agents` gains `list()`, `create()`, `get()`, `update()` and `delete()` for the AI agents that answer and place calls (up to 20 per workspace, each holding its own scoped sending key), and `voice->voices->list()` lists the voices they can speak with. Every method returns an array; lists come back under `data`. Reads need an API key with the `calls:read` scope, writes `calls:write` and a live key; in a team workspace, number changes also need a role that can change settings and agent changes a role that can manage API keys. `VoiceMode` holds the mode values, and `CallErrorCode` gains `AGENT_IN_USE`, `AGENT_LIMIT`, `INVALID_VOICE_MODE`, `INVALID_ADDRESS`, `E911_NOT_APPLICABLE`, `VOICE_ATTACH_FAILED`, `CARRIER_REFUSED` and `INSUFFICIENT_PERMISSIONS`.
+- **`SendlyException::getResponseBody()`** returns the decoded JSON body of an API error response, for refusals that carry more than a code and a message: a 409 `agent_in_use` lists the numbers the agent still answers under `numbers`, and a 422 `invalid_address` carries a corrected address (or null) under `suggested`. It is null for errors raised before a request is sent and when the error response is not JSON (an HTML 502 page, for example).
+
+### Patch Changes
+
+- **A PATCH with nothing to send carries `{}` instead of `[]`.** `Sendly::patch()` used to encode an empty body as the JSON array `[]`; it now sends the empty JSON object `{}`. This applies to every resource method that sends an empty PATCH body, such as `account->revokeApiKey()`.
+- **The `calls->recording()` docstring had the channels the wrong way round.** Agent-handled calls are recorded in stereo with the agent on the left channel and the other party on the right.
+
 ## 4.1.0
 
 ### Minor Changes

@@ -629,15 +629,16 @@ $client->messages()->send([
 Place a phone call that one of your workspace's AI agents handles, follow it
 while it rings and runs, end it early, and fetch the recording afterwards.
 Agents, which numbers take calls and how they answer, and emergency addresses
-are all set up in the dashboard under Calls; `$client->numbers()->list()`
-reports `voiceEnabled` and `voiceMode` on each number so you can pick one to
-call from.
+are set up from code with [`$client->voice`](#configure-voice) or in the
+dashboard under Calls; `$client->voice->numbers->list()` reports
+`voiceEnabled`, `voiceMode` and the emergency address on each number so you
+can pick one to call from.
 
 > **Note:** Calls are prepaid from your credit balance per started minute:
 > 2 credits a minute outbound plus 8 credits a minute while an AI agent is on
 > the call (10 credits a minute in total), US and Canada only, and unanswered
-> calls cost nothing. The `from` number must be voice-enabled in the dashboard
-> and have an emergency address registered. Voice is enabled workspace by
+> calls cost nothing. The `from` number must be voice-enabled and have an
+> emergency address registered. Voice is enabled workspace by
 > workspace; until it is on for your account the endpoints throw
 > `NotFoundException` (`voice_not_enabled`). Reads need the `calls:read`
 > scope, writes `calls:write` and a live key.
@@ -696,6 +697,7 @@ if ($result['pagination']['hasMore']) {
 $client->calls()->hangup($call['id']);
 
 // Fetch the recording. The URL is signed and valid for five minutes.
+// Agent-handled calls are stereo: the agent on the left channel, the other party on the right.
 $recording = $client->calls()->recording($call['id']);
 if ($recording['status'] === CallRecordingStatus::READY) {
     file_put_contents('call.ogg', file_get_contents($recording['url']));
@@ -724,6 +726,124 @@ platform cut it short.
 The `call.started`, `call.completed` and `call.recording.ready` webhooks carry
 the call at `$event->object` in snake_case (`handled_by`, `duration_secs`,
 `credits_charged`, `hangup_class`, `recording_status`, `billing`, `metadata`).
+
+### Configure voice
+
+Set up everything a call depends on from code: switch voice on for a number
+and choose how it answers, register its emergency address, and create the AI
+agents that talk. `$client->voice` uses the same `calls:read` and
+`calls:write` scopes, and writes need a live key. In a team workspace,
+changing a number or its emergency address needs a role that can change
+settings, and managing agents needs a role that can manage API keys (each
+agent holds its own scoped sending key); otherwise the API responds
+`403 forbidden`. Address a number by its id or its E.164 phone number.
+
+```php
+use Sendly\Resources\VoiceMode;
+use Sendly\Resources\CallErrorCode;
+use Sendly\Exceptions\SendlyException;
+use Sendly\Exceptions\ValidationException;
+
+// Pick a voice, then create an agent
+foreach ($client->voice->voices->list()['data'] as $voice) {
+    echo "{$voice['id']}: {$voice['label']}\n"; // "ashley: Ashley (US, warm)"
+}
+
+$agent = $client->voice->agents->create([
+    'name' => 'Front desk',
+    'voice' => 'ashley',
+    'greeting' => 'Thanks for calling Acme, how can I help?',
+    'instructions' => 'Answer questions about opening hours and take a message for anything else.',
+    'tools' => ['sendSms' => true],
+]);
+echo $agent['id'];                          // "3c4d5e6f-..."
+var_dump($agent['canSendSms']);             // true
+
+// Change only what you pass; tools keys you leave out keep their values
+$client->voice->agents->update($agent['id'], [
+    'greeting' => 'Thanks for calling Acme. How can I help today?',
+]);
+
+// Register the emergency address: required before a US or Canadian number
+// can place calls, and $1.50 a month
+try {
+    $number = $client->voice->numbers->registerEmergencyAddress('+15555550188', [
+        'street' => '500 Example Ave',
+        'unit' => 'Suite 2',
+        'city' => 'Austin',
+        'state' => 'TX',
+        'zip' => '78701',
+    ]);
+    echo $number['emergencyAddress']['status']; // "provisioning", then "active"
+} catch (ValidationException $e) {
+    // 422 invalid_address: the address couldn't be validated
+    print_r($e->getResponseBody()['suggested'] ?? null); // a corrected address, when one was found
+}
+
+// Switch voice on and have the agent answer real callers
+$number = $client->voice->numbers->update('+15555550188', [
+    'voiceEnabled' => true,
+    'voiceMode' => VoiceMode::AGENT,
+    'agentId' => $agent['id'],
+]);
+echo $number['voiceMode'];                  // "agent"
+print_r($number['ratePerMinute']);          // ['inbound' => 2, 'outbound' => 2, 'agent' => 10]
+
+// Ring the team in the dashboard instead, or switch voice off
+$client->voice->numbers->update($number['id'], ['voiceMode' => VoiceMode::RING_DASHBOARD]);
+$client->voice->numbers->update($number['id'], ['voiceEnabled' => false]);
+
+// Every number and agent in the workspace
+foreach ($client->voice->numbers->list()['data'] as $n) {
+    echo "{$n['phoneNumber']} {$n['voiceMode']}\n";
+}
+$agents = $client->voice->agents->list()['data'];
+
+// Delete an agent once no number answers with it; its sending key is revoked
+try {
+    $client->voice->agents->delete($agent['id']);
+} catch (SendlyException $e) {
+    if ($e->getApiErrorCode() === CallErrorCode::AGENT_IN_USE) {
+        print_r($e->getResponseBody()['numbers']); // ['+15555550188']
+    }
+}
+```
+
+| Method | Endpoint | Scope | Description |
+| --- | --- | --- | --- |
+| `voice->numbers->list()` | `GET /voice/numbers` | `calls:read` | Active numbers under `data`, each with `voiceEnabled`, `voiceMode`, `agentId`, `emergencyAddress` and `ratePerMinute`. |
+| `voice->numbers->get($number)` | `GET /voice/numbers/{number}` | `calls:read` | One number, by id or E.164 phone number. |
+| `voice->numbers->update($number, $params)` | `PATCH /voice/numbers/{number}` | `calls:write` | `voiceEnabled`, `voiceMode` (`none`, `ring_dashboard`, `agent`), `agentId` (`null` clears it). |
+| `voice->numbers->registerEmergencyAddress($number, $params, $idempotencyKey = null)` | `POST /voice/numbers/{number}/emergency-address` | `calls:write` | `street`, `city`, `state`, `zip` required; `unit` and `country` (`US`, the default, or `CA`) optional. |
+| `voice->agents->list()` | `GET /voice/agents` | `calls:read` | Agents under `data`, with `callsHandled` and `avgDurationSecs`. |
+| `voice->agents->create($params, $idempotencyKey = null)` | `POST /voice/agents` | `calls:write` | `name` required; `enabled`, `voice`, `language`, `greeting`, `instructions`, `tools` (`sendSms`, `transferTo`) optional. |
+| `voice->agents->get($id)` | `GET /voice/agents/{id}` | `calls:read` | One agent. |
+| `voice->agents->update($id, $params)` | `PATCH /voice/agents/{id}` | `calls:write` | Any subset of the create fields. |
+| `voice->agents->delete($id)` | `DELETE /voice/agents/{id}` | `calls:write` | Delete an agent and revoke its sending key. Returns `id`, `object` and `deleted`. |
+| `voice->voices->list()` | `GET /voice/voices` | `calls:read` | Voices (`id`, `label`, `language`) under `data`. |
+
+Every resource is also reachable method-style: `$client->voice()->numbers()->list()`.
+A `voiceMode` on its own is enough: `ring_dashboard` or `agent` switches voice
+on (and can be refused like any switch-on) and `none` switches it off. When
+`voiceEnabled` is sent too it wins: `false` switches voice off, and `true` with
+`none` rings the dashboard. A
+workspace can have up to 20 agents, and an unknown voice id falls back to the
+default voice. Agents can't transfer calls yet: with `tools.transferTo` set, a
+caller who asks for a person is told the message will be passed on and the
+agent takes their name and number.
+
+Refusals: `number_not_found` and `agent_not_found` (404, `NotFoundException`);
+`invalid_request`, `invalid_voice_mode`, `agent_required`, `invalid_address`
+and `e911_not_applicable` (400, `ValidationException`); `invalid_address`
+(422, `ValidationException`, with a corrected address or null under
+`suggested` in `getResponseBody()`); `agent_disabled` (409, switch the agent
+on first), `agent_limit` (409) and `agent_in_use` (409, the numbers the agent
+still answers under `numbers` in `getResponseBody()`); `voice_attach_failed`
+(502, try again); `carrier_refused` (502, try again, unless the message says
+the number couldn't be found for emergency registration: contact support); and
+`voice_unavailable` (503). The
+409, 502 and 503 refusals arrive as `SendlyException` with `getCode()` and
+`getApiErrorCode()` set, and `CallErrorCode` holds every code.
 
 ## Webhooks
 

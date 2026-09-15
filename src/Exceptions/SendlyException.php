@@ -18,6 +18,9 @@ class SendlyException extends Exception
 
     protected ?string $apiErrorCode = null;
 
+    /** @var array<string, mixed>|null */
+    protected ?array $responseBody = null;
+
     public function __construct(
         string $message = '',
         int $code = 0,
@@ -62,6 +65,34 @@ class SendlyException extends Exception
     public function withApiErrorCode(?string $code): static
     {
         $this->apiErrorCode = $code;
+
+        return $this;
+    }
+
+    /**
+     * The decoded JSON body of the API's error response, or null when the
+     * error did not come from an API response or the response body is not
+     * JSON (an HTML 502 page, for example). Some refusals carry more than
+     * `error` and `message`: a 409 `agent_in_use` lists the numbers the agent
+     * still answers under `numbers`, and a 422 `invalid_address` carries a
+     * corrected address (or null) under `suggested`.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getResponseBody(): ?array
+    {
+        return $this->responseBody;
+    }
+
+    /**
+     * Attach the API's decoded error response body to this exception.
+     *
+     * @param array<string, mixed>|null $body
+     * @return static
+     */
+    public function withResponseBody(?array $body): static
+    {
+        $this->responseBody = $body;
 
         return $this;
     }

@@ -27,6 +27,7 @@ use Sendly\Resources\Links;
 use Sendly\Resources\WhatsApp;
 use Sendly\Resources\Rcs;
 use Sendly\Resources\Calls;
+use Sendly\Resources\Voice;
 use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\AuthenticationException;
 use Sendly\Exceptions\RateLimitException;
@@ -80,6 +81,7 @@ class Sendly
     public WhatsApp $whatsapp;
     public Rcs $rcs;
     public Calls $calls;
+    public Voice $voice;
 
     /**
      * Create a new Sendly client
@@ -121,6 +123,7 @@ class Sendly
         $this->whatsapp = new WhatsApp($this);
         $this->rcs = new Rcs($this);
         $this->calls = new Calls($this);
+        $this->voice = new Voice($this);
     }
 
     /**
@@ -324,6 +327,16 @@ class Sendly
     }
 
     /**
+     * Get the Voice resource
+     *
+     * @return Voice
+     */
+    public function voice(): Voice
+    {
+        return $this->voice;
+    }
+
+    /**
      * Get the configured API base URL (e.g. https://sendly.live/api/v1)
      *
      * @return string
@@ -441,7 +454,7 @@ class Sendly
      */
     public function patch(string $path, array $body = []): array
     {
-        return $this->request('PATCH', $path, ['json' => $body]);
+        return $this->request('PATCH', $path, ['json' => $body === [] ? new \stdClass() : $body]);
     }
 
     /**
@@ -614,7 +627,8 @@ class Sendly
         }
 
         $statusCode = $response->getStatusCode();
-        $body = json_decode((string) $response->getBody(), true) ?? [];
+        $decoded = json_decode((string) $response->getBody(), true);
+        $body = is_array($decoded) ? $decoded : [];
         $message = $body['message'] ?? $body['error'] ?? 'Unknown error';
 
         $details = $body['details'] ?? $body['errors'] ?? null;
@@ -632,6 +646,8 @@ class Sendly
             default => new SendlyException($message, $statusCode),
         };
 
-        return $exception->withApiErrorCode(is_string($errorCode) ? $errorCode : null);
+        return $exception
+            ->withApiErrorCode(is_string($errorCode) ? $errorCode : null)
+            ->withResponseBody(is_array($decoded) ? $decoded : null);
     }
 }

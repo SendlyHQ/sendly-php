@@ -81,7 +81,8 @@ final class CallRecordingStatus
 }
 
 /**
- * Error codes the calls endpoints respond with. Read them from
+ * Error codes the calls and voice configuration ({@see Voice}) endpoints
+ * respond with. Read them from
  * {@see \Sendly\Exceptions\SendlyException::getApiErrorCode()}.
  */
 final class CallErrorCode
@@ -108,6 +109,14 @@ final class CallErrorCode
     public const CALL_NOT_FOUND = 'call_not_found';
     public const LIVE_KEY_REQUIRED = 'live_key_required';
     public const FORBIDDEN = 'forbidden';
+    public const INSUFFICIENT_PERMISSIONS = 'insufficient_permissions';
+    public const INVALID_VOICE_MODE = 'invalid_voice_mode';
+    public const INVALID_ADDRESS = 'invalid_address';
+    public const E911_NOT_APPLICABLE = 'e911_not_applicable';
+    public const AGENT_LIMIT = 'agent_limit';
+    public const AGENT_IN_USE = 'agent_in_use';
+    public const VOICE_ATTACH_FAILED = 'voice_attach_failed';
+    public const CARRIER_REFUSED = 'carrier_refused';
     public const VOICE_INTERNAL_ERROR = 'voice_internal_error';
 }
 
@@ -117,9 +126,10 @@ final class CallErrorCode
  * Place an outbound phone call that one of your workspace's AI agents
  * handles, list and inspect calls, end a call early, and fetch a call's
  * recording. Switching voice on for a number, choosing how it answers,
- * registering an emergency address and creating agents are done in the
- * dashboard; `$client->numbers()->list()` reports `voiceEnabled` and
- * `voiceMode` on each number so you can find one to call from.
+ * registering an emergency address and creating agents are done with
+ * {@see Voice} (`$client->voice`) or in the dashboard;
+ * `$client->voice->numbers->list()` reports `voiceEnabled`, `voiceMode` and
+ * the emergency address on each number so you can find one to call from.
  *
  * Calls are prepaid from your credit balance per started minute: 2 credits
  * a minute outbound plus 8 credits a minute while an AI agent is on the
@@ -164,8 +174,8 @@ class Calls
      *
      * Refusals you should handle: 402 `insufficient_credits` (the balance
      * cannot cover one minute at the agent rate; `InsufficientCreditsException`),
-     * 428 `e911_required` (register an emergency address for the number in
-     * the dashboard first), 409 `lines_busy` (every line is in use; the
+     * 428 `e911_required` (register an emergency address for the number
+     * first with {@see VoiceNumbers::registerEmergencyAddress()}), 409 `lines_busy` (every line is in use; the
      * client throws at once rather than retrying, so try again in a moment)
      * and 429 `daily_call_limit`. See {@see CallErrorCode} for the full set.
      *
@@ -291,8 +301,8 @@ class Calls
      * and `expiresAt` are set only when `status` is `ready`; the URL is
      * signed and valid for five minutes, so fetch it when you need it
      * rather than storing it. Recordings are Ogg/Opus (`contentType`
-     * `audio/ogg`); agent-handled calls are recorded dual-channel with the
-     * caller on the left and the agent on the right.
+     * `audio/ogg`); agent-handled calls are recorded in stereo with the
+     * agent on the left channel and the other party on the right.
      *
      * Requires an API key with the `calls:read` scope.
      *
