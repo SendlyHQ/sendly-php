@@ -203,6 +203,8 @@ class Campaigns
     /**
      * Pause a sending campaign
      *
+     * @deprecated The API has no campaign pause route, so this call fails with a 404. There is no replacement.
+     *
      * @param string $id Campaign ID
      * @return array<string, mixed>
      * @throws ValidationException If ID is empty
@@ -218,6 +220,8 @@ class Campaigns
 
     /**
      * Resume a paused campaign
+     *
+     * @deprecated The API has no campaign resume route, so this call fails with a 404. There is no replacement.
      *
      * @param string $id Campaign ID
      * @return array<string, mixed>
@@ -257,6 +261,8 @@ class Campaigns
     /**
      * Get campaign statistics
      *
+     * @deprecated The API has no campaign stats route, so this call fails with a 404. Read the campaign with get() instead.
+     *
      * @param string $id Campaign ID
      * @return array{sent: int, delivered: int, failed: int, pending: int, deliveryRate?: float}
      * @throws ValidationException If ID is empty
@@ -272,6 +278,8 @@ class Campaigns
 
     /**
      * Get campaign recipients with their delivery status
+     *
+     * @deprecated The API has no campaign recipients route, so this call fails with a 404. There is no replacement.
      *
      * @param string $id Campaign ID
      * @param array{limit?: int, offset?: int, status?: string} $options Query options
