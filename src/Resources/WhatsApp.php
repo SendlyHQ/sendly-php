@@ -31,7 +31,7 @@ class WhatsAppSignup
      *
      * @param string $phoneNumber The number to connect, in E.164 format. Must
      *   be an active number in your workspace (provisioned, purchased, or
-     *   ported into Sendly).
+     *   fully ported into Sendly).
      * @return array{id: string, connectUrl: string, status: string} The
      *   signup with its `connectUrl`. `status` is `initiated` (waiting for a
      *   human to complete the connect URL), `registering`, `active`,
