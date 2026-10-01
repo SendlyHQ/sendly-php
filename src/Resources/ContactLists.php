@@ -20,6 +20,9 @@ class ContactLists
     /**
      * List contact lists
      *
+     * The API returns every contact list in one response, newest first, and
+     * does not apply `limit` or `offset` today.
+     *
      * @param array{limit?: int, offset?: int} $options Query options
      * @return array{lists: array<array<string, mixed>>, total?: int, limit?: int, offset?: int}
      */
@@ -101,7 +104,7 @@ class ContactLists
             throw new ValidationException('Contact list ID is required');
         }
 
-        return $this->client->delete("/contact-lists/" . rawurlencode($id));
+        return $this->client->delete("/contact-lists/" . rawurlencode($id)) ?: ['success' => true];
     }
 
     /**
@@ -151,12 +154,15 @@ class ContactLists
     /**
      * Iterate over all contact lists with automatic pagination
      *
+     * The API returns every contact list in one response, so each() makes
+     * one request and `batchSize` has no effect today.
+     *
      * @param array{batchSize?: int} $options Query options
      * @return Generator<int, array<string, mixed>>
      */
     public function each(array $options = []): Generator
     {
-        $batchSize = $options['batchSize'] ?? 100;
+        $batchSize = max(1, min((int) ($options['batchSize'] ?? 100), 100));
         $offset = 0;
 
         do {
@@ -166,13 +172,13 @@ class ContactLists
             ]);
 
             $lists = $response['lists'] ?? $response['data'] ?? [];
-            $hasMore = count($lists) === $batchSize;
 
             foreach ($lists as $list) {
                 yield $list;
             }
 
-            $offset += $batchSize;
-        } while ($hasMore);
+            $offset += count($lists);
+            $hasMore = isset($response['total']) && $offset < (int) $response['total'];
+        } while ($hasMore && count($lists) > 0);
     }
 }

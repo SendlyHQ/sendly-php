@@ -137,9 +137,18 @@ class EnterpriseWorkspaces
     }
 
     /**
+     * Give a workspace the verification of another workspace you own.
+     *
+     * By default the workspace shares the source workspace's toll-free
+     * number. With `purchaseNewNumber` true, only the verification details
+     * are copied and the workspace is ordered its own toll-free number. The
+     * result then carries `newNumber` true even when no number could be
+     * ordered; `tollFreeNumber` is null in that case.
+     *
      * @param string $workspaceId
-     * @param array{sourceWorkspaceId: string} $options
-     * @return array<string, mixed>
+     * @param array{sourceWorkspaceId: string, purchaseNewNumber?: bool} $options
+     * @return array<string, mixed> `verificationId`, `status`, `type`, `tollFreeNumber`,
+     *   `inheritedFrom`, and `newNumber` whenever `purchaseNewNumber` was requested
      * @throws ValidationException
      */
     public function inheritVerification(string $workspaceId, array $options): array
@@ -152,9 +161,12 @@ class EnterpriseWorkspaces
             throw new ValidationException('Source workspace ID is required');
         }
 
-        return $this->client->post("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/verification/inherit", [
-            'source_workspace_id' => $options['sourceWorkspaceId'],
-        ]);
+        $payload = ['source_workspace_id' => $options['sourceWorkspaceId']];
+        if (array_key_exists('purchaseNewNumber', $options)) {
+            $payload['purchaseNewNumber'] = (bool) $options['purchaseNewNumber'];
+        }
+
+        return $this->client->post("/enterprise/workspaces/" . rawurlencode($workspaceId) . "/verification/inherit", $payload);
     }
 
     /**
@@ -497,8 +509,8 @@ class EnterpriseWorkspaces
             throw new ValidationException('Workspaces array is required');
         }
 
-        if (count($workspaces) > 50) {
-            throw new ValidationException('Maximum 50 workspaces per bulk provision');
+        if (count($workspaces) > 100) {
+            throw new ValidationException('Maximum 100 workspaces per bulk provision');
         }
 
         return $this->client->post('/enterprise/workspaces/provision/bulk', [

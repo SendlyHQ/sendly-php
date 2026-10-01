@@ -16,6 +16,7 @@ use Psr\Http\Message\RequestInterface;
 use Sendly\Sendly;
 use Sendly\Resources\Calls;
 use Sendly\Resources\CallBilling;
+use Sendly\Resources\CallChannel;
 use Sendly\Resources\CallDirection;
 use Sendly\Resources\CallErrorCode;
 use Sendly\Resources\CallHandledBy;
@@ -85,6 +86,7 @@ class CallsTest extends TestCase
             'id' => self::CALL_ID,
             'object' => 'call',
             'kind' => 'pstn',
+            'channel' => 'phone',
             'direction' => 'outbound',
             'status' => 'ringing',
             'handledBy' => 'agent',
@@ -131,6 +133,44 @@ class CallsTest extends TestCase
         $this->assertSame('voice_not_enabled', CallErrorCode::VOICE_NOT_ENABLED);
         $this->assertSame('e911_required', CallErrorCode::E911_REQUIRED);
         $this->assertSame('call_not_found', CallErrorCode::CALL_NOT_FOUND);
+    }
+
+    public function testCallChannelConstantsMatchTheWire(): void
+    {
+        $this->assertSame('phone', CallChannel::PHONE);
+        $this->assertSame('whatsapp', CallChannel::WHATSAPP);
+        $this->assertSame('browser', CallChannel::BROWSER);
+    }
+
+    public function testGetReportsTheCallChannel(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode($this->call([
+                'channel' => 'whatsapp',
+                'direction' => 'inbound',
+                'handledBy' => 'dashboard',
+                'agentId' => null,
+            ]))),
+        ]);
+
+        $call = $client->calls()->get(self::CALL_ID);
+
+        $this->assertSame(CallChannel::WHATSAPP, $call['channel']);
+    }
+
+    public function testListKeepsAChannelTheSdkDoesNotKnow(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode([
+                'data' => [$this->call(['channel' => 'satellite']), $this->call(['kind' => 'internal', 'channel' => CallChannel::BROWSER])],
+                'pagination' => ['total' => 2, 'limit' => 50, 'offset' => 0, 'hasMore' => false],
+            ])),
+        ]);
+
+        $result = $client->calls()->list();
+
+        $this->assertSame('satellite', $result['data'][0]['channel']);
+        $this->assertSame('browser', $result['data'][1]['channel']);
     }
 
     // ==================== create() ====================
@@ -283,6 +323,21 @@ class CallsTest extends TestCase
         }
 
         $this->assertCount(1, $this->history);
+    }
+
+    public function testCreateFromANumberOutsideTheUsOrCanadaHasItsCode(): void
+    {
+        $client = $this->createMockClient([
+            $this->apiError('POST', '/calls', 400, 'from_number_not_supported', 'Calls can only be placed from numbers in the US or Canada right now.'),
+        ]);
+
+        try {
+            $client->calls()->create(['to' => '+15555550123', 'agentId' => self::AGENT_ID, 'from' => '+447700900123']);
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertSame('from_number_not_supported', CallErrorCode::FROM_NUMBER_NOT_SUPPORTED);
+            $this->assertSame(CallErrorCode::FROM_NUMBER_NOT_SUPPORTED, $e->getApiErrorCode());
+        }
     }
 
     public function testCreateAgentRequiredMapsToValidationException(): void

@@ -273,19 +273,28 @@ class WebhookDelivery
 class WebhookTestResult
 {
     public readonly bool $success;
+    /** The HTTP status your endpoint answered the test event with */
     public readonly int $statusCode;
     public readonly int $responseTimeMs;
     public readonly ?string $error;
+    /** The API's summary of the test, such as "Test webhook delivered successfully in 123ms" */
+    public readonly ?string $message;
+    /** The ID of the test delivery, as listDeliveries() reports it */
+    public readonly ?string $deliveryId;
 
     /**
      * @param array<string, mixed> $data Response data
      */
     public function __construct(array $data)
     {
+        $delivery = is_array($data['delivery'] ?? null) ? $data['delivery'] : [];
         $this->success = (bool) ($data['success'] ?? false);
-        $this->statusCode = (int) ($data['status_code'] ?? $data['statusCode'] ?? 0);
-        $this->responseTimeMs = (int) ($data['response_time_ms'] ?? $data['responseTimeMs'] ?? 0);
-        $this->error = $data['error'] ?? null;
+        $this->statusCode = (int) ($data['status_code'] ?? $data['statusCode'] ?? $delivery['status_code'] ?? $delivery['statusCode'] ?? 0);
+        $this->responseTimeMs = (int) ($data['response_time_ms'] ?? $data['responseTimeMs']
+            ?? $delivery['response_time_ms'] ?? $delivery['response_time'] ?? $delivery['responseTimeMs'] ?? 0);
+        $this->error = $data['error'] ?? $delivery['error'] ?? null;
+        $this->message = $data['message'] ?? null;
+        $this->deliveryId = $delivery['delivery_id'] ?? $delivery['id'] ?? null;
     }
 }
 

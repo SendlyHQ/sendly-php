@@ -41,7 +41,7 @@ class MessageList implements IteratorAggregate, Countable
         $this->total = (int) ($pagination['total'] ?? count($this->messages));
         $this->limit = (int) ($pagination['limit'] ?? 20);
         $this->offset = (int) ($pagination['offset'] ?? 0);
-        $this->hasMore = (bool) ($pagination['has_more'] ?? false);
+        $this->hasMore = (bool) ($pagination['hasMore'] ?? $pagination['has_more'] ?? ($this->offset + count($this->messages) < $this->total));
     }
 
     /**

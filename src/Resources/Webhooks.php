@@ -160,9 +160,16 @@ class Webhooks
     /**
      * Test a webhook endpoint
      *
+     * Sends a `webhook.test` event to the endpoint and returns the delivery
+     * when the endpoint accepted it. When the delivery fails the API answers
+     * 400, so this throws a ValidationException whose message says why and
+     * whose getResponseBody() has `success` false. A webhook that does not
+     * exist or belongs to another workspace also gets a 400, so it throws a
+     * ValidationException here rather than the NotFoundException get() throws.
+     *
      * @param string $id Webhook ID
      * @return WebhookTestResult The test result
-     * @throws ValidationException If ID is empty
+     * @throws ValidationException If ID is empty, the webhook is not found, or the test delivery failed
      */
     public function test(string $id): WebhookTestResult
     {
@@ -228,8 +235,9 @@ class Webhooks
      * Backfill missed webhook events from the underlying message log.
      *
      * Use when a circuit-breaker outage left events with no audit row (the
-     * case redeliver() cannot recover). Synthesized events have fresh IDs;
-     * clients should dedupe by event.data.object.id (the message ID).
+     * case redeliver() cannot recover). Synthesized message events carry the
+     * same event id the original dispatch used, so dedupe on event.id. Do not
+     * dedupe on data.object.id: a message's sent and delivered events share it.
      * Rejects with HTTP 409 if the circuit is currently open — call
      * resetCircuit() first.
      *

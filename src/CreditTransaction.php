@@ -8,10 +8,18 @@ use DateTimeImmutable;
 
 class CreditTransaction
 {
+    /** A credit purchase, including an auto-recharge */
     public const TYPE_PURCHASE = 'purchase';
     public const TYPE_USAGE = 'usage';
     public const TYPE_REFUND = 'refund';
     public const TYPE_BONUS = 'bonus';
+    /** Credits moved between workspaces */
+    public const TYPE_TRANSFER = 'transfer';
+    /** Credits Sendly added to the account by hand */
+    public const TYPE_ADMIN_GRANT = 'admin_grant';
+    /** Test credits Sendly added to the account */
+    public const TYPE_ADMIN_SEED = 'admin_seed';
+    /** @deprecated Never recorded: the ledger has no adjustment transactions. */
     public const TYPE_ADJUSTMENT = 'adjustment';
 
     public readonly string $id;

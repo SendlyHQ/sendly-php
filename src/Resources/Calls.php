@@ -98,6 +98,7 @@ final class CallErrorCode
     public const INVALID_REQUEST = 'invalid_request';
     public const INVALID_NUMBER = 'invalid_number';
     public const FROM_NUMBER_REQUIRED = 'from_number_required';
+    public const FROM_NUMBER_NOT_SUPPORTED = 'from_number_not_supported';
     public const NO_VOICE_NUMBER = 'no_voice_number';
     public const NUMBER_NOT_FOUND = 'number_not_found';
     public const DESTINATION_NOT_SUPPORTED = 'destination_not_supported';
@@ -136,6 +137,11 @@ final class CallErrorCode
  * call, so an agent-handled outbound call costs 10 credits a minute.
  * Unanswered calls cost nothing. Destinations are US and Canada.
  *
+ * Every call, and the call in every `call.*` webhook, carries `channel`, a
+ * {@see CallChannel}: `phone`, `whatsapp` or `browser`. Calls placed here
+ * are phone calls; WhatsApp calls are placed from the dashboard or come in
+ * from WhatsApp users (see {@see WhatsAppSenders::setCalling()}).
+ *
  * Voice is enabled workspace by workspace. Until it is enabled for your
  * account every endpoint here throws `NotFoundException`
  * (`voice_not_enabled`). Reads need an API key with the `calls:read`
@@ -143,7 +149,7 @@ final class CallErrorCode
  * gets 403 `live_key_required`).
  *
  * @phpstan-type CallTranscriptLine array{speaker: string, text: string, atMs: int}
- * @phpstan-type Call array{id: string, object: string, kind: string, direction: string, status: string, handledBy: string, agentId: ?string, from: ?string, to: ?string, callerName: ?string, calleeName: ?string, startedAt: string, answeredAt: ?string, endedAt: ?string, durationSecs: int, creditsCharged: int, billing: string, hangupClass: ?string, recordingStatus: ?string, metadata: array<string, string>, transcript?: array<int, CallTranscriptLine>}
+ * @phpstan-type Call array{id: string, object: string, kind: string, channel: string, direction: string, status: string, handledBy: string, agentId: ?string, from: ?string, to: ?string, callerName: ?string, calleeName: ?string, startedAt: string, answeredAt: ?string, endedAt: ?string, durationSecs: int, creditsCharged: int, billing: string, hangupClass: ?string, recordingStatus: ?string, metadata: array<string, string>, transcript?: array<int, CallTranscriptLine>}
  * @phpstan-type CallPagination array{total: int, limit: int, offset: int, hasMore: bool}
  * @phpstan-type CallRecording array{callId: string, status: string, url: ?string, expiresAt: ?string, contentType: ?string}
  *
@@ -166,7 +172,9 @@ class Calls
      * subscribe to the `call.started` and `call.completed` webhooks to
      * follow it. `to` must be a US or Canadian number in E.164 format.
      * `from` is optional when exactly one of your numbers is voice-enabled
-     * and required (400 `from_number_required`) when more are. `context` is
+     * and required (400 `from_number_required`) when more are; calls can only
+     * be placed from a US or Canadian number (400 `from_number_not_supported`
+     * otherwise). `context` is
      * appended to the agent's instructions for this call only and is not
      * echoed back. `metadata` is stored and returned on every read and in
      * every `call.*` webhook: up to 20 keys of 1 to 40 characters matching

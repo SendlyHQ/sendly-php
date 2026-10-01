@@ -81,7 +81,8 @@ class Webhooks
      * @param string $secret     Your webhook secret from dashboard
      * @param string|null $timestamp X-Sendly-Timestamp header value (recommended)
      * @return WebhookEvent Parsed and validated event
-     * @throws WebhookSignatureException If signature is invalid or payload is malformed
+     * @throws WebhookSignatureException If signature is invalid, or the event has no id, type or data
+     * @throws \JsonException If the signature is valid but the payload is not JSON
      */
     public static function parseEvent(string $payload, string $signature, string $secret, ?string $timestamp = null): WebhookEvent
     {

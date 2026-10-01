@@ -10,6 +10,7 @@ use Sendly\WebhookEvent;
 use Sendly\WebhookMessageData;
 use Sendly\WebhookVerificationData;
 use Sendly\Exceptions\WebhookSignatureException;
+use Sendly\Resources\CallChannel;
 
 /**
  * Tests for Webhooks: verifySignature(), parseEvent(), generateSignature()
@@ -263,6 +264,14 @@ class WebhooksTest extends TestCase
         Webhooks::parseEvent($payload, $signature, $this->secret);
     }
 
+    public function testParseEventDocumentsEveryExceptionItThrows(): void
+    {
+        $doc = (string) (new \ReflectionMethod(Webhooks::class, 'parseEvent'))->getDocComment();
+
+        $this->assertStringContainsString('@throws WebhookSignatureException', $doc);
+        $this->assertStringContainsString('@throws \JsonException', $doc);
+    }
+
     public function testParseEventWithDefaultApiVersion(): void
     {
         $payload = json_encode([
@@ -454,6 +463,37 @@ class WebhooksTest extends TestCase
         $this->assertNull($event->object['hangup_class']);
         $this->assertSame(0, $event->object['duration_secs']);
         $this->assertSame('call', $event->object['object'], 'data.object.object is not the envelope');
+    }
+
+    public function testCallEventCarriesItsChannel(): void
+    {
+        foreach (['call.started', 'call.completed', 'call.recording.ready'] as $type) {
+            $event = $this->parse($type, [
+                'id' => 'call_1',
+                'object' => 'call',
+                'kind' => 'pstn',
+                'channel' => 'whatsapp',
+                'direction' => 'inbound',
+                'status' => 'completed',
+                'from' => '+15555550123',
+                'to' => '+15555550147',
+            ]);
+
+            $this->assertSame(CallChannel::WHATSAPP, $event->object['channel'], $type);
+            $this->assertSame(CallChannel::WHATSAPP, $event->get('channel'), $type);
+        }
+    }
+
+    public function testCallEventKeepsAnUnknownChannel(): void
+    {
+        $event = $this->parse('call.completed', [
+            'id' => 'call_1',
+            'object' => 'call',
+            'kind' => 'pstn',
+            'channel' => 'satellite',
+        ]);
+
+        $this->assertSame('satellite', $event->object['channel']);
     }
 
     public function testContactAutoFlaggedDoesNotMisattributeTheMessageId(): void

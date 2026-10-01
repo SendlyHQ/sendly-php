@@ -14,10 +14,11 @@ class ValidationException extends SendlyException
     /**
      * @param string $message Error message
      * @param array<string, mixed>|null $details Validation details
+     * @param int $statusCode HTTP status of the response (400 or 422)
      */
-    public function __construct(string $message = 'Validation failed', ?array $details = null)
+    public function __construct(string $message = 'Validation failed', ?array $details = null, int $statusCode = 400)
     {
-        parent::__construct($message, 400);
+        parent::__construct($message, $statusCode);
         $this->details = $details;
     }
 }

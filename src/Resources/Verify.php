@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sendly\Resources;
 
 use Sendly\Sendly;
+use Sendly\Exceptions\ValidationException;
 
 class Sessions
 {
@@ -95,9 +96,14 @@ class Verify
      *   sandbox_code?: string,
      *   message?: string
      * }
+     * @throws ValidationException If ID is empty
      */
     public function resend(string $id): array
     {
+        if ($id === '') {
+            throw new ValidationException('Verification ID is required');
+        }
+
         return $this->client->post("/verify/" . rawurlencode($id) . "/resend");
     }
 
@@ -113,9 +119,14 @@ class Verify
      *   verified_at?: string,
      *   remaining_attempts?: int
      * }
+     * @throws ValidationException If ID is empty
      */
     public function check(string $id, string $code): array
     {
+        if ($id === '') {
+            throw new ValidationException('Verification ID is required');
+        }
+
         return $this->client->post("/verify/" . rawurlencode($id) . "/check", ['code' => $code]);
     }
 
@@ -138,9 +149,14 @@ class Verify
      *   template_id?: string,
      *   profile_id?: string
      * }
+     * @throws ValidationException If ID is empty
      */
     public function get(string $id): array
     {
+        if ($id === '') {
+            throw new ValidationException('Verification ID is required');
+        }
+
         return $this->client->get("/verify/" . rawurlencode($id));
     }
 

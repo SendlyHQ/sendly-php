@@ -125,7 +125,7 @@ class Contacts
             throw new ValidationException('Contact ID is required');
         }
 
-        return $this->client->delete("/contacts/" . rawurlencode($id));
+        return $this->client->delete("/contacts/" . rawurlencode($id)) ?: ['success' => true];
     }
 
     /**
@@ -231,12 +231,13 @@ class Contacts
     /**
      * Iterate over all contacts with automatic pagination
      *
-     * @param array{search?: string, listId?: string, batchSize?: int} $options Query options
+     * @param array{search?: string, listId?: string, batchSize?: int} $options Query options.
+     *   `batchSize` is the page size, 1 to 100 (default 100).
      * @return Generator<int, array<string, mixed>>
      */
     public function each(array $options = []): Generator
     {
-        $batchSize = $options['batchSize'] ?? 100;
+        $batchSize = max(1, min((int) ($options['batchSize'] ?? 100), 100));
         $offset = 0;
 
         do {
@@ -248,13 +249,15 @@ class Contacts
             ]);
 
             $contacts = $response['contacts'] ?? $response['data'] ?? [];
-            $hasMore = count($contacts) === $batchSize;
 
             foreach ($contacts as $contact) {
                 yield $contact;
             }
 
-            $offset += $batchSize;
-        } while ($hasMore);
+            $offset += count($contacts);
+            $hasMore = isset($response['total'])
+                ? $offset < (int) $response['total']
+                : count($contacts) === $batchSize;
+        } while ($hasMore && count($contacts) > 0);
     }
 }

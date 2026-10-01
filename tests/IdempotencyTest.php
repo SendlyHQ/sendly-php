@@ -16,10 +16,11 @@ use GuzzleHttp\Psr7\Request;
 use Sendly\Sendly;
 use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\ValidationException;
+use Sendly\Exceptions\RateLimitException;
 use ReflectionClass;
 
 /**
- * Tests for automatic idempotency keys - generation, retry reuse, rotation
+ * Tests for automatic idempotency keys - generation and retry reuse
  */
 class IdempotencyTest extends TestCase
 {
@@ -98,7 +99,7 @@ class IdempotencyTest extends TestCase
         $client = $this->createMockClient([
             new Response(200, [], json_encode([
                 'data' => [],
-                'pagination' => ['total' => 0, 'limit' => 20, 'offset' => 0, 'has_more' => false],
+                'pagination' => ['total' => 0, 'limit' => 20, 'offset' => 0, 'hasMore' => false],
             ])),
         ]);
 
@@ -214,7 +215,7 @@ class IdempotencyTest extends TestCase
         $this->assertSame($this->keyOfRequest(0), $this->keyOfRequest(1));
     }
 
-    public function testKeyRotatedAfterServerErrorRetry(): void
+    public function testKeyKeptAcrossServerErrorRetry(): void
     {
         $client = $this->createMockClient([
             $this->serverErrorException(500),
@@ -228,11 +229,10 @@ class IdempotencyTest extends TestCase
         $first = $this->keyOfRequest(0);
         $second = $this->keyOfRequest(1);
         $this->assertNotNull($first);
-        $this->assertNotNull($second);
-        $this->assertNotSame($first, $second);
+        $this->assertSame($first, $second);
     }
 
-    public function testRotatedKeyKeptAcrossSubsequentTimeout(): void
+    public function testKeyKeptAcrossServerErrorThenTimeout(): void
     {
         $client = $this->createMockClient([
             $this->serverErrorException(500),
@@ -250,8 +250,8 @@ class IdempotencyTest extends TestCase
         $first = $this->keyOfRequest(0);
         $second = $this->keyOfRequest(1);
         $third = $this->keyOfRequest(2);
-        $this->assertNotSame($first, $second);
-        $this->assertSame($second, $third);
+        $this->assertSame($first, $second);
+        $this->assertSame($first, $third);
     }
 
     public function testClientErrorIsNotRetried(): void
@@ -276,7 +276,7 @@ class IdempotencyTest extends TestCase
         $this->assertMatchesRegularExpression(self::AUTO_KEY_PATTERN, (string) $this->keyOfRequest(0));
     }
 
-    public function testKeyRotatedOnServerErrorForMediaUpload(): void
+    public function testKeyKeptOnServerErrorForMediaUpload(): void
     {
         $client = $this->createMockClient([
             new RequestException(
@@ -302,8 +302,224 @@ class IdempotencyTest extends TestCase
         $first = $this->keyOfRequest(0);
         $second = $this->keyOfRequest(1);
         $this->assertMatchesRegularExpression(self::AUTO_KEY_PATTERN, (string) $first);
-        $this->assertMatchesRegularExpression(self::AUTO_KEY_PATTERN, (string) $second);
-        $this->assertNotSame($first, $second);
+        $this->assertSame($first, $second);
+    }
+
+    // ==================== 429s from API key checks ====================
+
+    private function keyCheckRefusal(string $method, string $path, string $code, int $retryAfter): RequestException
+    {
+        $message = $code === 'too_many_concurrent_verifications'
+            ? 'Too many API key checks are already running for this account from this address. Try again in 1 second.'
+            : "Too many failed API key attempts. Try again in {$retryAfter} seconds.";
+
+        return new RequestException(
+            'Too Many Requests',
+            new Request($method, $path),
+            new Response(
+                429,
+                ['Retry-After' => (string) $retryAfter, 'Content-Type' => 'application/json'],
+                json_encode(['error' => $code, 'message' => $message, 'retryAfter' => $retryAfter])
+            )
+        );
+    }
+
+    public function testBusyKeyCheckIsRetriedWithTheSameKey(): void
+    {
+        $client = $this->createMockClient([
+            $this->keyCheckRefusal('POST', '/messages', 'too_many_concurrent_verifications', 1),
+            $this->messageResponse(),
+        ]);
+
+        $client->messages()->send('+15551234567', 'Hello!');
+
+        $this->assertCount(2, $this->history);
+        $this->assertSame($this->keyOfRequest(0), $this->keyOfRequest(1));
+    }
+
+    public function testBusyKeyCheckOnAnUploadIsRetried(): void
+    {
+        $client = $this->createMockClient([
+            $this->keyCheckRefusal('POST', '/media', 'too_many_concurrent_verifications', 1),
+            new Response(200, [], json_encode([
+                'media' => ['id' => 'med_x', 'url' => 'https://cdn.example/x.jpg'],
+            ])),
+        ]);
+
+        $filePath = tempnam(sys_get_temp_dir(), 'sendly_php_sdk_test_');
+        file_put_contents($filePath, 'fake-image-bytes');
+
+        try {
+            $client->media()->upload($filePath);
+        } finally {
+            unlink($filePath);
+        }
+
+        $this->assertCount(2, $this->history);
+        $this->assertSame($this->keyOfRequest(0), $this->keyOfRequest(1));
+    }
+
+    public function testAnUploadSurvivesTwoRetries(): void
+    {
+        $requests = 0;
+        $bodies = [];
+        $mock = new MockHandler([
+            $this->keyCheckRefusal('POST', '/media', 'too_many_concurrent_verifications', 1),
+            $this->keyCheckRefusal('POST', '/media', 'too_many_concurrent_verifications', 1),
+            new Response(200, [], json_encode([
+                'media' => ['id' => 'med_x', 'url' => 'https://cdn.example/x.jpg'],
+            ])),
+        ]);
+        $handlerStack = HandlerStack::create($mock);
+        $handlerStack->push(Middleware::tap(function ($request) use (&$requests, &$bodies): void {
+            $requests++;
+            $bodies[] = (string) $request->getBody();
+        }));
+        $client = new Sendly('test_api_key');
+        (new ReflectionClass($client))->getProperty('httpClient')->setValue($client, new Client(['handler' => $handlerStack]));
+
+        $filePath = tempnam(sys_get_temp_dir(), 'sendly_php_sdk_test_');
+        file_put_contents($filePath, 'fake-image-bytes');
+
+        try {
+            $client->media()->upload($filePath);
+        } finally {
+            unlink($filePath);
+        }
+
+        $this->assertSame(3, $requests);
+        foreach ($bodies as $body) {
+            $this->assertStringContainsString('fake-image-bytes', $body);
+        }
+    }
+
+    /** @var array<int, int> */
+    private array $sleeps = [];
+
+    private function recordSleeps(Sendly $client): void
+    {
+        $this->sleeps = [];
+        (new ReflectionClass($client))->getProperty('sleep')->setValue(
+            $client,
+            function (int $microseconds): void {
+                $this->sleeps[] = $microseconds;
+            }
+        );
+    }
+
+    public function testAServerErrorAfterABusyKeyCheckWaitsTheBackoff(): void
+    {
+        $client = $this->createMockClient([
+            $this->keyCheckRefusal('POST', '/messages', 'too_many_concurrent_verifications', 3),
+            $this->serverErrorException(503),
+            $this->messageResponse(),
+        ]);
+        $this->recordSleeps($client);
+
+        $client->messages()->send('+15551234567', 'Hello!');
+
+        $this->assertCount(3, $this->history);
+        $this->assertSame([3000000, 2000000], $this->sleeps);
+    }
+
+    public function testABusyKeyCheckWaitsItsRetryAfterOnALaterAttempt(): void
+    {
+        $client = $this->createMockClient([
+            $this->serverErrorException(503),
+            $this->serverErrorException(503),
+            $this->keyCheckRefusal('POST', '/messages', 'too_many_concurrent_verifications', 1),
+            $this->messageResponse(),
+        ]);
+        $this->recordSleeps($client);
+
+        $client->messages()->send('+15551234567', 'Hello!');
+
+        $this->assertCount(4, $this->history);
+        $this->assertSame([1000000, 2000000, 1000000], $this->sleeps);
+    }
+
+    public function testBusyKeyCheckOverAMinuteIsThrownAtOnce(): void
+    {
+        $client = $this->createMockClient([
+            $this->keyCheckRefusal('POST', '/messages', 'too_many_concurrent_verifications', 61),
+            $this->messageResponse(),
+        ]);
+
+        try {
+            $client->messages()->send('+15551234567', 'Hello!');
+            $this->fail('Expected RateLimitException');
+        } catch (RateLimitException $e) {
+            $this->assertSame('too_many_concurrent_verifications', $e->getApiErrorCode());
+        }
+
+        $this->assertCount(1, $this->history);
+    }
+
+    public function testRetryAfterFallsBackToTheBody(): void
+    {
+        $client = $this->createMockClient([
+            new RequestException(
+                'Too Many Requests',
+                new Request('POST', '/verify'),
+                new Response(429, ['Content-Type' => 'application/json'], json_encode([
+                    'error' => 'rate_limit_exceeded',
+                    'message' => 'Too many OTPs sent to this phone number. Max 5 per 10 minutes.',
+                    'retryAfter' => 600,
+                ]))
+            ),
+        ]);
+
+        try {
+            $client->verify()->send('+14155552672');
+            $this->fail('Expected RateLimitException');
+        } catch (RateLimitException $e) {
+            $this->assertSame(600, $e->getRetryAfter());
+        }
+
+        $this->assertCount(1, $this->history);
+    }
+
+    public function testFailedKeyLockoutIsThrownAtOnce(): void
+    {
+        $client = $this->createMockClient([
+            $this->keyCheckRefusal('POST', '/messages', 'too_many_failed_key_attempts', 240),
+            $this->messageResponse(),
+        ]);
+
+        try {
+            $client->messages()->send('+15551234567', 'Hello!');
+            $this->fail('Expected RateLimitException');
+        } catch (RateLimitException $e) {
+            $this->assertSame('too_many_failed_key_attempts', $e->getApiErrorCode());
+            $this->assertSame(240, $e->getRetryAfter());
+            $this->assertSame('Too many failed API key attempts. Try again in 240 seconds.', $e->getMessage());
+        }
+
+        $this->assertCount(1, $this->history);
+    }
+
+    public function testA422KeepsItsStatus(): void
+    {
+        $client = $this->createMockClient([
+            new RequestException(
+                'Unprocessable Entity',
+                new Request('POST', '/messages'),
+                new Response(422, [], json_encode([
+                    'error' => 'idempotency_key_mismatch',
+                    'message' => 'This idempotency key was already used with a different request body. Use a new key for different requests.',
+                ]))
+            ),
+        ]);
+
+        try {
+            $client->messages()->send('+15551234567', 'Hello!');
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertSame(422, $e->getCode());
+            $this->assertSame('idempotency_key_mismatch', $e->getApiErrorCode());
+        }
+
+        $this->assertCount(1, $this->history);
     }
 
     // ==================== Caller-supplied keys ====================

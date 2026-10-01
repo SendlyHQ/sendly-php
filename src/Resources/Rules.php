@@ -30,8 +30,11 @@ class Rules
      * Create a new rule
      *
      * @param string $name Rule name
-     * @param array<array<string, mixed>> $conditions Rule conditions
-     * @param array<array<string, mixed>> $actions Rule actions
+     * @param array<string, mixed>|list<array<string, mixed>> $conditions Rule conditions, one object:
+     *   `intent` and `sentiment` (a value or a list of values), `intentConfidenceMin` and
+     *   `sentimentConfidenceMin`. A list of arrays is merged into one object.
+     * @param array<string, mixed>|list<array<string, mixed>> $actions Rule actions, one object:
+     *   `addLabels` (label IDs) and `closeConversation`. A list of arrays is merged into one object.
      * @param array{priority?: int} $options Additional options
      * @return array<string, mixed>
      * @throws ValidationException If parameters are invalid
@@ -52,8 +55,8 @@ class Rules
 
         $payload = [
             'name' => $name,
-            'conditions' => $conditions,
-            'actions' => $actions,
+            'conditions' => $this->asObject($conditions),
+            'actions' => $this->asObject($actions),
         ];
 
         if (isset($options['priority'])) {
@@ -67,7 +70,8 @@ class Rules
      * Update a rule
      *
      * @param string $id Rule ID
-     * @param array{name?: string, conditions?: array<array<string, mixed>>, actions?: array<array<string, mixed>>, priority?: int} $data Update data
+     * @param array{name?: string, conditions?: array<string, mixed>|list<array<string, mixed>>, actions?: array<string, mixed>|list<array<string, mixed>>, priority?: int} $data Update data,
+     *   with `conditions` and `actions` as in create()
      * @return array<string, mixed>
      * @throws ValidationException If ID is empty
      */
@@ -75,6 +79,12 @@ class Rules
     {
         if (empty($id)) {
             throw new ValidationException('Rule ID is required');
+        }
+
+        foreach (['conditions', 'actions'] as $field) {
+            if (isset($data[$field])) {
+                $data[$field] = $this->asObject($data[$field]);
+            }
         }
 
         return $this->client->patch("/rules/" . rawurlencode($id), $data);
@@ -94,5 +104,24 @@ class Rules
         }
 
         return $this->client->delete("/rules/" . rawurlencode($id));
+    }
+
+    /**
+     * @param array<mixed> $value
+     * @return array<mixed>
+     */
+    private function asObject(array $value): array
+    {
+        if ($value === [] || !array_is_list($value)) {
+            return $value;
+        }
+
+        foreach ($value as $entry) {
+            if (!is_array($entry) || $entry === [] || array_is_list($entry)) {
+                return $value;
+            }
+        }
+
+        return array_merge(...$value);
     }
 }

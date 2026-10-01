@@ -13,7 +13,12 @@ class Campaigns
     public const STATUS_DRAFT = 'draft';
     public const STATUS_SCHEDULED = 'scheduled';
     public const STATUS_SENDING = 'sending';
+    /** What a sent campaign's status becomes */
+    public const STATUS_COMPLETED = 'completed';
+    public const STATUS_FAILED = 'failed';
+    /** Never returned: a sent campaign is 'completed'. As a list() filter it matches completed campaigns. */
     public const STATUS_SENT = 'sent';
+    /** @deprecated Never returned: campaigns cannot be paused. */
     public const STATUS_PAUSED = 'paused';
     public const STATUS_CANCELLED = 'cancelled';
 
@@ -28,7 +33,7 @@ class Campaigns
      * List campaigns
      *
      * @param array{limit?: int, offset?: int, status?: string} $options Query options
-     * @return array{campaigns: array<array<string, mixed>>, pagination?: array<string, mixed>}
+     * @return array{campaigns: array<array<string, mixed>>, total?: int, limit?: int, offset?: int}
      */
     public function list(array $options = []): array
     {
@@ -60,9 +65,15 @@ class Campaigns
     /**
      * Create a new campaign
      *
+     * A campaign targets one contact list: pass `contactListId`, or a single ID
+     * in `contactListIds` (the API answers 400 to more than one). The API sends
+     * every campaign as a marketing message, subject to quiet hours, and has no
+     * segments: `segmentId` and `messageType` have no effect.
+     *
      * @param string $name Campaign name
      * @param string $text Message content
-     * @param array{contactListId?: string, contactListIds?: array<string>, segmentId?: string, messageType?: string} $options Additional options
+     * @param array{contactListId?: string, contactListIds?: array<string>, segmentId?: string, messageType?: string} $options Additional options.
+     *   `segmentId` and `messageType` are deprecated and have no effect.
      * @return array<string, mixed>
      * @throws ValidationException If parameters are invalid
      */
@@ -76,7 +87,7 @@ class Campaigns
             throw new ValidationException('Campaign text is required');
         }
 
-        if (strlen($text) > 1600) {
+        if ((preg_match_all('/./su', $text) ?: strlen($text)) > 1600) {
             throw new ValidationException('Campaign text exceeds maximum length (1600 characters)');
         }
 
@@ -93,8 +104,12 @@ class Campaigns
     /**
      * Update a campaign
      *
+     * Only a draft or scheduled campaign can be edited. As with create(),
+     * `segmentId` and `messageType` have no effect.
+     *
      * @param string $id Campaign ID
-     * @param array{name?: string, text?: string, contactListId?: string, contactListIds?: array<string>, segmentId?: string, messageType?: string} $data Update data
+     * @param array{name?: string, text?: string, contactListId?: string, contactListIds?: array<string>, segmentId?: string, messageType?: string} $data Update data.
+     *   `segmentId` and `messageType` are deprecated and have no effect.
      * @return array<string, mixed>
      * @throws ValidationException If parameters are invalid
      */
@@ -104,7 +119,7 @@ class Campaigns
             throw new ValidationException('Campaign ID is required');
         }
 
-        if (isset($data['text']) && strlen($data['text']) > 1600) {
+        if (isset($data['text']) && (preg_match_all('/./su', $data['text']) ?: strlen($data['text'])) > 1600) {
             throw new ValidationException('Campaign text exceeds maximum length (1600 characters)');
         }
 
@@ -126,7 +141,7 @@ class Campaigns
             throw new ValidationException('Campaign ID is required');
         }
 
-        return $this->client->delete("/campaigns/" . rawurlencode($id));
+        return $this->client->delete("/campaigns/" . rawurlencode($id)) ?: ['success' => true];
     }
 
     /**
@@ -304,12 +319,13 @@ class Campaigns
     /**
      * Iterate over all campaigns with automatic pagination
      *
-     * @param array{status?: string, batchSize?: int} $options Query options
+     * @param array{status?: string, batchSize?: int} $options Query options.
+     *   `batchSize` is the page size, 1 to 100 (default 100).
      * @return Generator<int, array<string, mixed>>
      */
     public function each(array $options = []): Generator
     {
-        $batchSize = $options['batchSize'] ?? 100;
+        $batchSize = max(1, min((int) ($options['batchSize'] ?? 100), 100));
         $offset = 0;
 
         do {
@@ -320,14 +336,16 @@ class Campaigns
             ]);
 
             $campaigns = $response['campaigns'] ?? $response['data'] ?? [];
-            $hasMore = count($campaigns) === $batchSize;
 
             foreach ($campaigns as $campaign) {
                 yield $campaign;
             }
 
-            $offset += $batchSize;
-        } while ($hasMore);
+            $offset += count($campaigns);
+            $hasMore = isset($response['total'])
+                ? $offset < (int) $response['total']
+                : count($campaigns) === $batchSize;
+        } while ($hasMore && count($campaigns) > 0);
     }
 
     /**

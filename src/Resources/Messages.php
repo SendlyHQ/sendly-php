@@ -42,8 +42,11 @@ class Messages
      *     ]);
      *
      * Pass 'channel' => 'whatsapp' in the options array to send on WhatsApp
-     * instead of SMS. WhatsApp sends require a live API key and a `from`
-     * number with an active WhatsApp connection (see $client->whatsapp).
+     * instead of SMS. WhatsApp sends require the `sms:send` scope (not
+     * `whatsapp:write`), a live API key and a `from` number with an active
+     * WhatsApp connection (see $client->whatsapp). WhatsApp is enabled per
+     * person (the user who owns the API key, not the workspace); while it is
+     * off the API responds 403 `whatsapp_not_enabled`.
      * Provide one of `text` (free-form, only deliverable inside an open
      * 24-hour window — outside it the API responds 422
      * `whatsapp_window_closed`), `mediaUrls` (a single media attachment;
@@ -96,8 +99,32 @@ class Messages
      *   a Message; WhatsApp sends return the raw message array (id, channel,
      *   message_format, to, from, text, status, segments, creditsUsed,
      *   whatsapp: [kind, template?, messageId], createdAt, metadata); RCS
-     *   sends return the raw message array (see {@see sendRcs()}).
-     * @throws ValidationException If parameters are invalid
+     *   sends return the raw message array (see {@see sendRcs()}). On a
+     *   WhatsApp send, `text` is the caption for media (pass it as `text`
+     *   with `mediaUrls`) and null for templates and for media sent without
+     *   a caption. `creditsUsed`: free-form text or media inside the
+     *   24-hour window costs 1 credit each for the first 1,000 per sending
+     *   number per calendar month (UTC), then the destination's utility
+     *   template price; countries without a listed price use the default
+     *   utility price of 12 credits. Templates are priced by category and
+     *   destination country; countries without a listed price use 33
+     *   (marketing), 12 (utility) and 12 (authentication) credits. A failed
+     *   send gives its slot back.
+     * @throws ValidationException If parameters are invalid, or on a WhatsApp
+     *   send the 422 `whatsapp_send_failed` when WhatsApp refused the message
+     *   (final, not retried, not charged; cached under the idempotency key
+     *   and replayed for 24 hours). A 502 `whatsapp_send_failed` means the
+     *   message provably never reached the carrier, so it was not sent and
+     *   is safe to send again; it is never cached, so the client retries it
+     *   like any 5xx under the same idempotency key and then throws a
+     *   SendlyException. Neither is charged. No send returns 503
+     *   `whatsapp_unavailable`.
+     * @throws \Sendly\Exceptions\SendlyException On a WhatsApp send, 409
+     *   `whatsapp_send_unconfirmed` when the outcome is unknown: the message
+     *   was marked failed and refunded but may still be delivered, so check
+     *   before sending it again (it could arrive twice). It is not retried
+     *   automatically, and it is cached under the idempotency key, so
+     *   repeating the request with the same key returns the same 409.
      */
     public function send(string|array $to, ?string $text = null, ?string $messageType = null, ?array $metadata = null, ?array $mediaUrls = null, ?string $from = null, ?string $idempotencyKey = null): Message|array
     {
@@ -416,12 +443,13 @@ class Messages
     /**
      * Iterate over all messages with automatic pagination
      *
-     * @param array{status?: string, to?: string, batchSize?: int} $options Query options
+     * @param array{status?: string, to?: string, batchSize?: int} $options Query options.
+     *   `batchSize` is the page size, 1 to 100 (default 100).
      * @return Generator<int, Message>
      */
     public function each(array $options = []): Generator
     {
-        $batchSize = $options['batchSize'] ?? 100;
+        $batchSize = max(1, min((int) ($options['batchSize'] ?? 100), 100));
         $offset = 0;
 
         do {
@@ -436,8 +464,8 @@ class Messages
                 yield $message;
             }
 
-            $offset += $batchSize;
-        } while ($page->hasMore);
+            $offset += count($page);
+        } while ($page->hasMore && count($page) > 0);
     }
 
     /**
@@ -674,7 +702,7 @@ class Messages
             throw new ValidationException('Message text is required');
         }
 
-        if (strlen($text) > 1600) {
+        if ((preg_match_all('/./su', $text) ?: strlen($text)) > 1600) {
             throw new ValidationException(
                 'Message text exceeds maximum length (1600 characters)'
             );

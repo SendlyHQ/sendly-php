@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sendly;
 
+use GuzzleHttp\Psr7\Utils;
 use GuzzleHttp\Client as GuzzleClient;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Exception\ConnectException;
@@ -55,6 +56,7 @@ class Sendly
     private int $maxRetries;
     private string $organizationId;
     private GuzzleClient $httpClient;
+    private \Closure $sleep;
 
     // Resource properties exposed as public so users can access them
     // directly (e.g. $client->messages->send(...)) matching the idiom of
@@ -100,6 +102,9 @@ class Sendly
         $this->timeout = $options['timeout'] ?? self::DEFAULT_TIMEOUT;
         $this->maxRetries = $options['maxRetries'] ?? 3;
         $this->organizationId = $options['organization_id'] ?? getenv('SENDLY_ORG_ID') ?: '';
+        $this->sleep = static function (int $microseconds): void {
+            usleep($microseconds);
+        };
 
         $this->buildHttpClient();
 
@@ -445,6 +450,22 @@ class Sendly
     }
 
     /**
+     * Make a POST request that must not run twice. It goes out on a new
+     * connection, so cURL cannot resend it when a reused connection drops,
+     * and a 5xx or a failed connection is thrown at once instead of retried.
+     *
+     * @internal
+     * @param string $path API endpoint path
+     * @param array<string, mixed> $body Request body
+     * @return array<string, mixed> Response data
+     * @throws SendlyException
+     */
+    public function postWithoutRetry(string $path, array $body = []): array
+    {
+        return $this->request('POST', $path, ['json' => $body] + $this->newConnectionOptions(), null, true, false);
+    }
+
+    /**
      * Make a PATCH request
      *
      * @param string $path API endpoint path
@@ -498,6 +519,31 @@ class Sendly
     }
 
     /**
+     * Make a multipart POST request that must not run twice. It goes out on
+     * a new connection, so cURL cannot resend it when a reused connection
+     * drops, and a 5xx or a failed connection is thrown at once instead of
+     * retried.
+     *
+     * @internal
+     * @param string $path API endpoint path
+     * @param array<array{name: string, contents: mixed, filename?: string, headers?: array<string, string>}> $multipart Multipart form fields
+     * @return array<string, mixed> Response data
+     * @throws SendlyException
+     */
+    public function postMultipartWithoutRetry(string $path, array $multipart): array
+    {
+        return $this->request('POST', $path, ['multipart' => $multipart] + $this->newConnectionOptions(), null, true, false);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function newConnectionOptions(): array
+    {
+        return \defined('CURLOPT_FRESH_CONNECT') ? ['curl' => [\CURLOPT_FRESH_CONNECT => true]] : [];
+    }
+
+    /**
      * Make an HTTP request with retries
      *
      * @param string $method HTTP method
@@ -505,23 +551,40 @@ class Sendly
      * @param array<string, mixed> $options Request options
      * @param string|null $idempotencyKey Caller-supplied idempotency key, sent verbatim and never rotated
      * @param bool $autoIdempotencyKey Whether to auto-generate a key for a POST when none is supplied
+     * @param bool $retry Whether a 5xx or a failed connection is retried
      * @return array<string, mixed> Response data
      * @throws SendlyException
      */
-    private function request(string $method, string $path, array $options = [], ?string $idempotencyKey = null, bool $autoIdempotencyKey = true): array
+    private function request(string $method, string $path, array $options = [], ?string $idempotencyKey = null, bool $autoIdempotencyKey = true, bool $retry = true): array
     {
+        foreach (explode('/', explode('?', $path, 2)[0]) as $segment) {
+            if ($segment === '.' || $segment === '..') {
+                throw new ValidationException(
+                    "Invalid id '{$segment}': an id in a path cannot be empty, '.' or '..'"
+                );
+            }
+        }
+
         $explicitKey = $this->normalizeIdempotencyKey($idempotencyKey);
         $key = $explicitKey;
         if ($key === null && $method === 'POST' && $autoIdempotencyKey) {
             $key = $this->generateIdempotencyKey();
         }
 
+        if (isset($options['multipart']) && is_array($options['multipart'])) {
+            foreach ($options['multipart'] as $index => $part) {
+                if (is_array($part) && isset($part['contents']) && is_resource($part['contents'])) {
+                    $options['multipart'][$index]['contents'] = Utils::streamFor($part['contents']);
+                }
+            }
+        }
+
         $lastException = null;
+        $nextDelay = 0;
 
         for ($attempt = 0; $attempt <= $this->maxRetries; $attempt++) {
             if ($attempt > 0) {
-                $delay = (int) pow(2, $attempt - 1) * 1000000; // Exponential backoff in microseconds
-                usleep($delay);
+                ($this->sleep)($nextDelay);
             }
 
             if ($key !== null) {
@@ -542,24 +605,25 @@ class Sendly
             } catch (RequestException $e) {
                 $lastException = $this->handleRequestException($e);
 
+                if ($lastException instanceof RateLimitException &&
+                    $lastException->getApiErrorCode() === 'too_many_concurrent_verifications' &&
+                    $lastException->getRetryAfter() <= 60 &&
+                    $attempt < $this->maxRetries) {
+                    $nextDelay = $lastException->getRetryAfter() * 1000000;
+                    continue;
+                }
+
                 // A 4xx is the server refusing the request as sent - throw immediately
                 if ($lastException->getCode() >= 400 && $lastException->getCode() < 500) {
                     throw $lastException;
                 }
-
-                // A 5xx means the server responded (and may have cached that
-                // response under the key), so an auto-generated key is rotated
-                // to let the retry re-execute. Connection failures leave the
-                // outcome unknown - the key is kept so the server can dedupe a
-                // request that actually went through. Caller-supplied keys are
-                // never rotated.
-                if ($explicitKey === null &&
-                    $key !== null &&
-                    $attempt < $this->maxRetries &&
-                    $lastException->getCode() >= 500) {
-                    $key = $this->generateIdempotencyKey();
-                }
             }
+
+            if (!$retry) {
+                throw $lastException;
+            }
+
+            $nextDelay = (int) pow(2, $attempt) * 1000000;
         }
 
         throw $lastException ?? new SendlyException('Request failed after retries');
@@ -640,9 +704,9 @@ class Sendly
             404 => new NotFoundException($message),
             429 => new RateLimitException(
                 $message,
-                (int) ($response->getHeader('Retry-After')[0] ?? 0)
+                (int) ($response->getHeader('Retry-After')[0] ?? $body['retryAfter'] ?? $body['retry_after'] ?? 0)
             ),
-            400, 422 => new ValidationException($message, is_array($details) ? $details : null),
+            400, 422 => new ValidationException($message, is_array($details) ? $details : null, $statusCode),
             default => new SendlyException($message, $statusCode),
         };
 

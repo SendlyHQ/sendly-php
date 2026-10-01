@@ -91,9 +91,17 @@ class Account
     /**
      * Create a new API key
      *
+     * Without `type` the API creates a test key. A live key needs a verified
+     * business and a credit balance: the API answers 403
+     * `verification_required` or 402 `credits_required` otherwise. `scopes`
+     * can only name scopes the calling key has (403 `insufficient_permissions`
+     * otherwise); without it the new key gets the calling key's scopes.
+     *
      * @param string $name Name for the API key
-     * @param array{expiresAt?: string} $options Additional options
+     * @param array{type?: 'test'|'live', scopes?: list<string>, expiresAt?: string} $options Additional options.
+     *   `expiresAt` is an ISO 8601 time in the future.
      * @return array{apiKey: ApiKey, key: string} The created API key with full key value
+     * @throws ValidationException If the name is empty or `type` is not 'test' or 'live'
      */
     public function createApiKey(string $name, array $options = []): array
     {
@@ -102,6 +110,15 @@ class Account
         }
 
         $payload = ['name' => $name];
+        if (isset($options['type'])) {
+            if (!in_array($options['type'], ['test', 'live'], true)) {
+                throw new ValidationException("API key type must be 'test' or 'live'");
+            }
+            $payload['type'] = $options['type'];
+        }
+        if (isset($options['scopes'])) {
+            $payload['scopes'] = array_values($options['scopes']);
+        }
         if (isset($options['expiresAt'])) {
             $payload['expires_at'] = $options['expiresAt'];
         }
