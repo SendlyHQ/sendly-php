@@ -330,7 +330,7 @@ them, so a retried upload can store the file twice.
 
 On the endpoints that deduplicate (sends, batch, group, schedule, conversation
 replies, draft approval, verify, number purchase, credit transfers, enterprise
-deposits and provisioning, WhatsApp signup and template creation, calls, and
+provisioning, WhatsApp signup and template creation, calls, and
 RCS and short-code writes) the API records the answer under the key for a 2xx
 and for every 4xx except 429, and repeating the request with the same key
 within 24 hours returns that recorded answer. A 5xx or a 429 is never recorded, so a retry under the same
