@@ -96,6 +96,7 @@ class Webhook
     public const EVENT_SHORT_CODE_LIVE = 'short_code.live';
     public const EVENT_SHORT_CODE_SUSPENDED = 'short_code.suspended';
     public const EVENT_SHORT_CODE_REACTIVATED = 'short_code.reactivated';
+    public const EVENT_SHORT_CODE_CANCELLED = 'short_code.cancelled';
     public const EVENT_SHORT_CODE_PAYMENT_SUCCEEDED = 'short_code.payment_succeeded';
     public const EVENT_SHORT_CODE_PAYMENT_FAILED = 'short_code.payment_failed';
 
