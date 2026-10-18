@@ -12,6 +12,8 @@ use GuzzleHttp\Psr7\Response;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\Request;
 use Sendly\Sendly;
+use Sendly\Message;
+use Sendly\WhatsAppSmsFallback;
 use Sendly\Resources\WhatsApp;
 use Sendly\Resources\WhatsAppSignup;
 use Sendly\Resources\WhatsAppSenders;
@@ -857,5 +859,320 @@ class WhatsAppTest extends TestCase
             'from' => '+15559876543',
             'text' => 'Your table is ready!',
         ]);
+    }
+
+    // ==================== SMS fallback ====================
+
+    private function sendWithFallbackOption(array $extra): array
+    {
+        $capturedBody = null;
+        $client = $this->createCapturingClient([
+            new Response(201, [], json_encode($this->whatsappMessage([
+                'text' => 'Your table is ready!',
+                'status' => 'sent',
+                'whatsapp' => ['kind' => 'text', 'messageId' => null],
+            ]))),
+        ], $capturedBody);
+
+        $client->messages()->send(array_merge([
+            'channel' => 'whatsapp',
+            'to' => '+15551234567',
+            'from' => '+15559876543',
+            'text' => 'Your table is ready!',
+        ], $extra));
+
+        return json_decode($capturedBody, true);
+    }
+
+    public function testSendWhatsAppSendsFallbackToSmsTrue(): void
+    {
+        $sentBody = $this->sendWithFallbackOption(['fallbackToSms' => true]);
+        $this->assertTrue($sentBody['fallbackToSms']);
+    }
+
+    public function testSendWhatsAppSendsFallbackToSmsFalse(): void
+    {
+        $sentBody = $this->sendWithFallbackOption(['fallbackToSms' => false]);
+        $this->assertArrayHasKey('fallbackToSms', $sentBody);
+        $this->assertFalse($sentBody['fallbackToSms']);
+    }
+
+    public function testSendWhatsAppCastsFallbackToSmsToBoolean(): void
+    {
+        $sentBody = $this->sendWithFallbackOption(['fallbackToSms' => 1]);
+        $this->assertTrue($sentBody['fallbackToSms']);
+    }
+
+    public function testSendWhatsAppOmitsFallbackToSmsWhenAbsent(): void
+    {
+        $sentBody = $this->sendWithFallbackOption([]);
+        $this->assertArrayNotHasKey('fallbackToSms', $sentBody);
+    }
+
+    public function testSendWhatsAppReturnsFallbackSentAsSms(): void
+    {
+        $client = $this->createMockClient([
+            new Response(201, [], json_encode($this->whatsappMessage([
+                'text' => 'Your table is ready!',
+                'status' => 'failed',
+                'whatsapp' => ['kind' => 'text', 'messageId' => null],
+                'fallback' => [
+                    'channel' => 'sms',
+                    'status' => 'sent',
+                    'reason' => 'window_closed',
+                    'messageId' => 'msg_sms_1',
+                    'creditsUsed' => 2,
+                    'contentDropped' => ['quick_replies'],
+                ],
+            ]))),
+        ]);
+
+        $message = $client->messages()->send([
+            'channel' => 'whatsapp',
+            'to' => '+15551234567',
+            'from' => '+15559876543',
+            'text' => 'Your table is ready!',
+            'fallbackToSms' => true,
+        ]);
+
+        $this->assertSame('failed', $message['status']);
+        $this->assertSame('sent', $message['fallback']['status']);
+        $this->assertSame('msg_sms_1', $message['fallback']['messageId']);
+
+        $fallback = new WhatsAppSmsFallback($message['fallback']);
+        $this->assertSame('sms', $fallback->channel);
+        $this->assertSame(WhatsAppSmsFallback::STATUS_SENT, $fallback->status);
+        $this->assertSame(WhatsAppSmsFallback::REASON_WINDOW_CLOSED, $fallback->reason);
+        $this->assertSame('msg_sms_1', $fallback->messageId);
+        $this->assertSame(2, $fallback->creditsUsed);
+        $this->assertNull($fallback->error);
+        $this->assertSame(['quick_replies'], $fallback->contentDropped);
+        $this->assertTrue($fallback->isSent());
+        $this->assertFalse($fallback->isPending());
+        $this->assertSame([
+            'channel' => 'sms',
+            'status' => 'sent',
+            'reason' => 'window_closed',
+            'message_id' => 'msg_sms_1',
+            'credits_used' => 2,
+            'content_dropped' => ['quick_replies'],
+        ], $fallback->toArray());
+    }
+
+    public function testSendWhatsAppReturnsPendingFallback(): void
+    {
+        $client = $this->createMockClient([
+            new Response(201, [], json_encode($this->whatsappMessage([
+                'status' => 'sent',
+                'fallback' => ['channel' => 'sms', 'status' => 'pending'],
+            ]))),
+        ]);
+
+        $message = $client->messages()->send([
+            'channel' => 'whatsapp',
+            'to' => '+15551234567',
+            'from' => '+15559876543',
+            'text' => 'Your table is ready!',
+            'fallbackToSms' => true,
+        ]);
+
+        $fallback = new WhatsAppSmsFallback($message['fallback']);
+        $this->assertTrue($fallback->isPending());
+        $this->assertNull($fallback->reason);
+        $this->assertNull($fallback->messageId);
+        $this->assertNull($fallback->creditsUsed);
+        $this->assertNull($fallback->contentDropped);
+        $this->assertSame(['channel' => 'sms', 'status' => 'pending'], $fallback->toArray());
+    }
+
+    public function testSendWhatsAppWithoutFallback(): void
+    {
+        $client = $this->createMockClient([
+            new Response(201, [], json_encode($this->whatsappMessage(['status' => 'sent']))),
+        ]);
+
+        $message = $client->messages()->send([
+            'channel' => 'whatsapp',
+            'to' => '+15551234567',
+            'from' => '+15559876543',
+            'text' => 'Your table is ready!',
+        ]);
+
+        $this->assertSame('sent', $message['status']);
+        $this->assertArrayNotHasKey('fallback', $message);
+    }
+
+    public function testSendWhatsAppFallbackUnavailableCarriesCode(): void
+    {
+        $client = $this->createMockClient([
+            new RequestException(
+                'Forbidden',
+                new Request('POST', '/messages'),
+                new Response(403, [], json_encode([
+                    'error' => 'sms_fallback_unavailable',
+                    'message' => 'This number can\'t send SMS to this recipient.',
+                    'suggestion' => 'Send without fallbackToSms, or make sure this number can send SMS to this recipient first.',
+                ]))
+            ),
+        ]);
+
+        try {
+            $client->messages()->send([
+                'channel' => 'whatsapp',
+                'to' => '+15551234567',
+                'from' => '+15559876543',
+                'text' => 'Your table is ready!',
+                'fallbackToSms' => true,
+            ]);
+            $this->fail('Expected SendlyException');
+        } catch (SendlyException $e) {
+            $this->assertNotInstanceOf(ValidationException::class, $e);
+            $this->assertSame(403, $e->getCode());
+            $this->assertSame('sms_fallback_unavailable', $e->getApiErrorCode());
+            $this->assertSame('This number can\'t send SMS to this recipient.', $e->getMessage());
+            $this->assertStringContainsString('fallbackToSms', $e->getResponseBody()['suggestion']);
+        }
+    }
+
+    public function testSendWhatsAppFallbackNotSupportedCarriesCode(): void
+    {
+        $client = $this->createMockClient([
+            new RequestException(
+                'Unprocessable Entity',
+                new Request('POST', '/messages'),
+                new Response(422, [], json_encode([
+                    'error' => 'sms_fallback_not_supported',
+                    'reason' => 'marketing_template',
+                    'message' => 'Marketing templates can\'t fall back to SMS: SMS marketing needs its own consent. Send without fallbackToSms.',
+                ]))
+            ),
+        ]);
+
+        try {
+            $client->messages()->send([
+                'channel' => 'whatsapp',
+                'to' => '+15551234567',
+                'from' => '+15559876543',
+                'template' => ['name' => 'spring_sale', 'language' => 'en_US'],
+                'fallbackToSms' => true,
+            ]);
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertSame(422, $e->getCode());
+            $this->assertSame('sms_fallback_not_supported', $e->getApiErrorCode());
+            $this->assertSame('marketing_template', $e->getResponseBody()['reason']);
+        }
+    }
+
+    public function testSendWhatsAppWindowClosedCarriesFallback(): void
+    {
+        $client = $this->createMockClient([
+            new RequestException(
+                'Unprocessable Entity',
+                new Request('POST', '/messages'),
+                new Response(422, [], json_encode([
+                    'error' => 'whatsapp_window_closed',
+                    'message' => 'This conversation\'s 24-hour reply window is closed or was never opened.',
+                    'suggestion' => 'Send an approved template to reach this contact.',
+                    'id' => 'msg_wa_1',
+                    'fallback' => [
+                        'channel' => 'sms',
+                        'status' => 'failed',
+                        'reason' => 'window_closed',
+                        'error' => 'Insufficient credits for the SMS.',
+                    ],
+                ]))
+            ),
+        ]);
+
+        try {
+            $client->messages()->send([
+                'channel' => 'whatsapp',
+                'to' => '+15551234567',
+                'from' => '+15559876543',
+                'text' => 'Your table is ready!',
+                'fallbackToSms' => true,
+            ]);
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertSame('whatsapp_window_closed', $e->getApiErrorCode());
+            $body = $e->getResponseBody();
+            $this->assertSame('msg_wa_1', $body['id']);
+            $fallback = new WhatsAppSmsFallback($body['fallback']);
+            $this->assertSame(WhatsAppSmsFallback::STATUS_FAILED, $fallback->status);
+            $this->assertSame('Insufficient credits for the SMS.', $fallback->error);
+            $this->assertFalse($fallback->isSent());
+        }
+    }
+
+    public function testMessageGetCarriesFallback(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode([
+                'id' => 'msg_wa_1',
+                'to' => '+15551234567',
+                'from' => '+15559876543',
+                'text' => 'Your table is ready!',
+                'status' => 'failed',
+                'direction' => 'outbound',
+                'messageFormat' => 'whatsapp',
+                'message_format' => 'whatsapp',
+                'createdAt' => '2026-10-17T09:12:00Z',
+                'fallback' => [
+                    'channel' => 'sms',
+                    'status' => 'sent',
+                    'reason' => 'whatsapp_failed',
+                    'messageId' => 'msg_sms_1',
+                    'creditsUsed' => 2,
+                ],
+            ])),
+        ]);
+
+        $message = $client->messages()->get('msg_wa_1');
+
+        $this->assertInstanceOf(WhatsAppSmsFallback::class, $message->fallback);
+        $this->assertSame('sent', $message->fallback->status);
+        $this->assertSame('whatsapp_failed', $message->fallback->reason);
+        $this->assertSame('msg_sms_1', $message->fallback->messageId);
+        $this->assertSame(2, $message->fallback->creditsUsed);
+        $this->assertNull($message->fallbackOf);
+        $this->assertSame([
+            'channel' => 'sms',
+            'status' => 'sent',
+            'reason' => 'whatsapp_failed',
+            'message_id' => 'msg_sms_1',
+            'credits_used' => 2,
+        ], $message->toArray()['fallback']);
+    }
+
+    public function testMessageGetCarriesFallbackOf(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode([
+                'id' => 'msg_sms_1',
+                'to' => '+15551234567',
+                'from' => '+15559876543',
+                'text' => 'Your table is ready!',
+                'status' => 'delivered',
+                'direction' => 'outbound',
+                'messageFormat' => 'sms',
+                'createdAt' => '2026-10-17T09:12:01Z',
+                'fallbackOf' => 'msg_wa_1',
+            ])),
+        ]);
+
+        $message = $client->messages()->get('msg_sms_1');
+
+        $this->assertNull($message->fallback);
+        $this->assertSame('msg_wa_1', $message->fallbackOf);
+        $this->assertSame('msg_wa_1', $message->toArray()['fallback_of']);
+        $this->assertNull($message->toArray()['fallback']);
+    }
+
+    public function testMessageWithoutFallbackFields(): void
+    {
+        $message = new Message(['id' => 'msg_1', 'to' => '+15551234567', 'text' => 'Hi', 'status' => 'sent']);
+        $this->assertNull($message->fallback);
+        $this->assertNull($message->fallbackOf);
     }
 }

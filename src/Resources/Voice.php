@@ -79,7 +79,7 @@ class VoiceNumbers
      *
      * Refusals you should handle, a mode sent on its own included: 400
      * `agent_required` (`agent` mode with no agent), 404 `agent_not_found`,
-     * 409 `agent_disabled` (switch the agent on first), 502
+     * 409 `agent_disabled` (switch the agent on first), 503
      * `voice_attach_failed` (voice could not be switched on; try again) and
      * 503 `voice_unavailable`. A wrongly typed field is 400
      * `invalid_request` and an unknown mode 400 `invalid_voice_mode`, both
@@ -129,7 +129,7 @@ class VoiceNumbers
      * that could not be validated is 422 `invalid_address`, also a
      * `ValidationException`, with a corrected address (or null) under
      * `suggested` in {@see \Sendly\Exceptions\SendlyException::getResponseBody()}.
-     * A refused registration is 502 `carrier_refused`; try again in a moment,
+     * A refused registration is 503 `carrier_refused`; try again in a moment,
      * unless the message says the number couldn't be found for emergency
      * registration, which retrying won't fix: contact support.
      *

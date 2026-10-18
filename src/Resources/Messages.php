@@ -64,6 +64,24 @@ class Messages
      *         ],
      *     ]);
      *
+     * Add 'fallbackToSms' => true to a WhatsApp send (default false) and a
+     * message WhatsApp can't deliver goes as an SMS from the same number,
+     * billed as an SMS: when the 24-hour window is closed, when WhatsApp
+     * refuses it, or when WhatsApp reports it undeliverable later. The
+     * response's `fallback` says what happened (see {@see \Sendly\WhatsAppSmsFallback}).
+     * The number must already be able to send SMS to the recipient (US and
+     * Canada), or the API responds 403 `sms_fallback_unavailable`; marketing
+     * and authentication templates, and media without a caption, get 422
+     * `sms_fallback_not_supported`:
+     *     $message = $client->messages->send([
+     *         'channel' => 'whatsapp',
+     *         'to' => '+1...',
+     *         'from' => '+1...',
+     *         'text' => 'Your table is ready!',
+     *         'fallbackToSms' => true,
+     *     ]);
+     *     $message['fallback']['status']; // 'sent' when it went as an SMS
+     *
      * Pass 'channel' => 'rcs' in the options array to send on RCS instead.
      * RCS sends require a live API key and a sendable RCS agent on your
      * workspace (see $client->rcs). Provide exactly one of `text`
@@ -98,8 +116,9 @@ class Messages
      * @return Message|array<string, mixed> The sent message. SMS sends return
      *   a Message; WhatsApp sends return the raw message array (id, channel,
      *   message_format, to, from, text, status, segments, creditsUsed,
-     *   whatsapp: [kind, template?, messageId], createdAt, metadata); RCS
-     *   sends return the raw message array (see {@see sendRcs()}). On a
+     *   whatsapp: [kind, template?, messageId], createdAt, metadata, and
+     *   fallback when the send asked for 'fallbackToSms'); RCS sends return
+     *   the raw message array (see {@see sendRcs()}). On a
      *   WhatsApp send, `text` is the caption for media (pass it as `text`
      *   with `mediaUrls`) and null for templates and for media sent without
      *   a caption. `creditsUsed`: free-form text or media inside the
@@ -109,17 +128,32 @@ class Messages
      *   utility price of 12 credits. Templates are priced by category and
      *   destination country; countries without a listed price use 33
      *   (marketing), 12 (utility) and 12 (authentication) credits. A failed
-     *   send gives its slot back.
+     *   send gives its slot back. `fallback` is [channel ('sms'), status
+     *   ('pending', 'sent', 'failed', 'unavailable' or 'skipped'), reason?
+     *   ('window_closed', 'whatsapp_refused' or 'whatsapp_failed'),
+     *   messageId? (the SMS message's id), creditsUsed? (what the SMS cost),
+     *   error? (why the SMS didn't go), contentDropped? (template parts with
+     *   no SMS form, such as 'quick_replies')]. When WhatsApp couldn't take
+     *   the message and it went as an SMS instead, `status` is 'failed' and
+     *   `fallback.status` is 'sent'.
      * @throws ValidationException If parameters are invalid, or on a WhatsApp
      *   send the 422 `whatsapp_send_failed` when WhatsApp refused the message
      *   (final, not retried, not charged; cached under the idempotency key
-     *   and replayed for 24 hours). A 502 `whatsapp_send_failed` means the
+     *   and replayed for 24 hours). A 503 `whatsapp_send_failed` means the
      *   message provably never reached the carrier, so it was not sent and
      *   is safe to send again; it is never cached, so the client retries it
      *   like any 5xx under the same idempotency key and then throws a
      *   SendlyException. Neither is charged. No send returns 503
-     *   `whatsapp_unavailable`.
-     * @throws \Sendly\Exceptions\SendlyException On a WhatsApp send, 409
+     *   `whatsapp_unavailable`. With 'fallbackToSms', 422
+     *   `sms_fallback_not_supported` for a marketing or authentication
+     *   template or media without a caption (`getResponseBody()['reason']`
+     *   says which), and a 422 `whatsapp_window_closed` or
+     *   `whatsapp_send_failed` means the SMS couldn't go either: its
+     *   `getResponseBody()` carries `fallback` saying why (and, for a
+     *   closed window, the failed WhatsApp message's `id`).
+     * @throws \Sendly\Exceptions\SendlyException On a WhatsApp send with
+     *   'fallbackToSms', 403 `sms_fallback_unavailable` when the number can't
+     *   send SMS to the recipient. On a WhatsApp send, 409
      *   `whatsapp_send_unconfirmed` when the outcome is unknown: the message
      *   was marked failed and refunded but may still be delivered, so check
      *   before sending it again (it could arrive twice). It is not retried
@@ -187,8 +221,10 @@ class Messages
     /**
      * Send a WhatsApp message ('channel' => 'whatsapp').
      *
-     * @param array<string, mixed> $options WhatsApp message options
-     * @return array<string, mixed> The created WhatsApp message
+     * @param array<string, mixed> $options WhatsApp message options;
+     *   'fallbackToSms' is sent as a boolean when the key is present
+     * @return array<string, mixed> The created WhatsApp message, with
+     *   `fallback` when the send asked for 'fallbackToSms'
      * @throws ValidationException If no content is provided or a number is invalid
      */
     private function sendWhatsApp(array $options): array
@@ -227,6 +263,10 @@ class Messages
 
         if (isset($options['metadata']) && is_array($options['metadata'])) {
             $payload['metadata'] = $options['metadata'];
+        }
+
+        if (array_key_exists('fallbackToSms', $options)) {
+            $payload['fallbackToSms'] = (bool) $options['fallbackToSms'];
         }
 
         return $this->client->post(

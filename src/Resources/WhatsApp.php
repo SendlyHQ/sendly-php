@@ -22,66 +22,59 @@ class WhatsAppSignup
     /**
      * Start connecting a number to WhatsApp.
      *
-     * Charges a one-time $19 setup fee (no monthly fee) and returns a
+     * Connecting a number is free, with no monthly fee. Returns a
      * `connectUrl`. Completing the connection requires a human: hand the URL
      * to your user — they open it in a browser and log in with Facebook to
      * link their WhatsApp Business Account. Then poll {@see get()} until the
      * status is `active`.
      *
      * Calling again for a number with an in-flight signup returns the
-     * existing signup (same `connectUrl`) without charging again. Requires a
-     * live API key with the `whatsapp:write` scope (a test key gets 403
+     * existing signup (same `connectUrl`). Requires a live API key with the
+     * `whatsapp:write` scope (a test key gets 403
      * `whatsapp_requires_live_key`) and, in a team workspace, an owner or
      * admin (`settings:write`). After the Facebook step the signup stays
      * `registering` while WhatsApp activates the number. Activation usually
      * takes a few minutes but can take hours. If it hasn't finished about 6
      * hours after the session began, the session fails with
-     * `registration_timeout` and the fee is refunded. If the connection
-     * fails, the $19 fee is refunded automatically; once the number has
-     * connected there is no refund, and a later disconnect gets nothing
-     * back.
+     * `registration_timeout`.
      *
      * While WhatsApp connections are unavailable the API answers a Facebook
-     * connection with 503 `whatsapp_unavailable` before charging anything,
-     * with `retryAfter: 3600` in the body and a `Retry-After: 3600` header.
-     * Only signup returns it;
-     * no send does. The client retries it like any 5xx before
-     * throwing a SendlyException. After 5 failed, charged signups in 24 hours
+     * connection with 503 `whatsapp_unavailable`, with `retryAfter: 3600` in
+     * the body and a `Retry-After: 3600` header. Only signup returns it; no
+     * send does. The client retries it like any 5xx before throwing a
+     * SendlyException. After 5 failed signups (or 20 cancelled) in 24 hours
      * it answers 429 `whatsapp_signup_limit_reached`, thrown as a
      * RateLimitException; try again the next day.
      *
-     * To add another number to a WhatsApp Business Account this workspace
-     * has already connected, pass its `businessAccountId` (as reported on
+     * To add another number to a WhatsApp Business Account this workspace has
+     * already connected, pass its `businessAccountId` (as reported on
      * {@see WhatsAppSenders::list()} and on a signup). There is no Facebook
-     * step and no `connectUrl`: the same eligibility checks, $19 fee, refund
-     * and limit apply, WhatsApp sends the number a 6-digit code by text
+     * step and no `connectUrl`: the same eligibility checks and limit apply,
+     * connecting is free, WhatsApp sends the number a 6-digit code by text
      * (`verificationMethod` `sms`, the default) or voice call (`voice`), and
      * the signup comes back `verifying`. Submit the code with
      * {@see verify()}; {@see get()} also returns it as `verificationCode`
      * once the text has reached the number. Calling again for a number that
-     * is already verifying returns the same signup without charging again
-     * or sending a second code; a verifying signup more than 3 hours old
-     * fails with `verification_expired` (its fee is refunded) and a new one,
-     * with its own fee, starts instead. `displayName` (at most 512 characters)
-     * defaults to the display name of the account's connected number, then
-     * its business name; with neither the API answers 400
-     * `display_name_required`. Other refusals: 404
+     * is already verifying returns the same signup without sending a second
+     * code; a verifying signup more than 3 hours old fails with
+     * `verification_expired` and a new one starts instead. `displayName` (at
+     * most 512 characters) defaults to the display name of the account's
+     * connected number, then its business name; with neither the API answers
+     * 400 `display_name_required`. Other refusals: 404
      * `whatsapp_business_account_not_found` (no connected account with that
      * id, with at least one active number, in this workspace), 409
      * `whatsapp_signup_in_progress` (a Facebook connection for the number is
      * under way; the body's `id` is that signup), 409
      * `whatsapp_already_enabled`, and `whatsapp_verification_start_failed`
-     * when WhatsApp won't send the code: a 422 when it refused (final), a
-     * 502 when it couldn't be reached. Either way the signup fails and the
-     * fee is refunded. With `businessAccountId` the client never retries a
-     * 5xx or a failed connection: it throws the 502 as a SendlyException
-     * (a failed connection as a NetworkException) at once, since each retry
-     * could start a new signup with its own charge and refund that counts
-     * toward the daily limit. Check with {@see get()} or call again when you
-     * are ready. Without `businessAccountId`, a number that is verifying
-     * answers 409
-     * `whatsapp_verification_in_progress`, with the signup's `id` in the
-     * body.
+     * when WhatsApp won't send the code: a 422 when it refused (final), a 503
+     * when it couldn't be reached. Either way the signup fails. With
+     * `businessAccountId` the client never retries a 5xx or a failed
+     * connection: it throws the 503 as a SendlyException (a failed connection
+     * as a NetworkException) at once, since each retry could start a new
+     * signup that counts toward the daily limit. Check with {@see get()} or
+     * call again when you are ready. Without `businessAccountId`, a number
+     * that is verifying answers 409 `whatsapp_verification_in_progress`, with
+     * the signup's `id` in the body.
      *
      * @param string $phoneNumber The number to connect, in E.164 format. Must
      *   be an active number in your workspace (provisioned, purchased, or
@@ -143,11 +136,11 @@ class WhatsAppSignup
      *   signup started, so after a resend it still shows the earlier code
      *   until the new one arrives. Once WhatsApp has checked a code, only a
      *   code that arrived after the last submission or resend is returned. A
-     *   submission answered with 502 `whatsapp_verification_unavailable` is
+     *   submission answered with 503 `whatsapp_verification_unavailable` is
      *   not counted, so the same unchecked code can come back, and
      *   submitting it again with {@see verify()} is safe.
      *   `failureReasons` is set only when status is `failed`, with one code:
-     *   `setup_fee_payment_failed`,
+     *   `setup_fee_payment_failed` (the connection couldn't be started),
      *   `signup_abandoned`, `meta_exchange_failed`, `registration_failed`,
      *   `waba_already_connected`, `waba_mismatch` (the WhatsApp Business
      *   Account chosen in the Facebook step doesn't hold the verified
@@ -157,8 +150,7 @@ class WhatsAppSignup
      *   `verification_failed` (too many wrong codes) or
      *   `verification_expired` (no code was submitted or requested for an
      *   hour or more, or the signup was more than 3 hours old when the
-     *   number was added again). If the connection fails, the $19 fee is
-     *   refunded automatically.
+     *   number was added again).
      * @throws ValidationException If ID is empty.
      */
     public function get(string $id): array
@@ -182,19 +174,19 @@ class WhatsAppSignup
      *
      * Refusals: 400 `invalid_verification_code` (not 6 digits), 422
      * `whatsapp_verification_code_invalid` (wrong code;
-     * `getResponseBody()['attemptsRemaining']` says how many tries are
-     * left), 409 `whatsapp_verification_failed` (the fifth wrong code: the
-     * signup fails, the fee is refunded and `whatsapp_account.failed`
-     * fires), 409 `whatsapp_verification_busy` (another code for the number
-     * is being checked; try again in a moment), 409 `signup_not_active`
-     * (the signup isn't waiting for a code, or is more than 3 hours old) and
-     * 404 `signup_not_found`. A 502 `whatsapp_verification_unavailable`
-     * (WhatsApp couldn't be reached; the attempt isn't counted, so submit
-     * the code again shortly) or `whatsapp_activation_pending` (the code was
-     * accepted but connecting the number didn't finish; Sendly is alerted,
-     * so check with {@see get()} rather than submitting again) is thrown as
-     * a SendlyException. The client never retries this call after a 5xx or
-     * a failed connection, because every submission uses up one of the five
+     * `getResponseBody()['attemptsRemaining']` says how many tries are left),
+     * 409 `whatsapp_verification_failed` (the fifth wrong code: the signup
+     * fails and `whatsapp_account.failed` fires), 409
+     * `whatsapp_verification_busy` (another code for the number is being
+     * checked; try again in a moment), 409 `signup_not_active` (the signup
+     * isn't waiting for a code, or is more than 3 hours old) and 404
+     * `signup_not_found`. A 503 `whatsapp_verification_unavailable` (WhatsApp
+     * couldn't be reached; the attempt isn't counted, so submit the code
+     * again shortly) or `whatsapp_activation_pending` (the code was accepted
+     * but connecting the number didn't finish; Sendly is alerted, so check
+     * with {@see get()} rather than submitting again) is thrown as a
+     * SendlyException. The client never retries this call after a 5xx or a
+     * failed connection, because every submission uses up one of the five
      * attempts.
      *
      * @param string $id Signup ID
@@ -225,7 +217,7 @@ class WhatsAppSignup
      * thrown as a RateLimitException whose `getRetryAfter()` is the seconds
      * to wait. When WhatsApp won't send one the API answers
      * `whatsapp_verification_resend_failed`: a 422 when it refused (wait a
-     * few minutes), a 502 when it couldn't be reached. A signup that isn't
+     * few minutes), a 503 when it couldn't be reached. A signup that isn't
      * waiting for a code answers 409 `signup_not_active`; one already
      * `active` is returned unchanged. Requires a live API key with the
      * `whatsapp:write` scope and, in a team workspace, an owner or admin
@@ -384,7 +376,7 @@ class WhatsAppSenders
      * Refusals: 400 `file_required` (no file), 400
      * `whatsapp_profile_photo_invalid` (not a JPEG or PNG), 413
      * `whatsapp_profile_photo_too_large` (over 5 MB, thrown as a
-     * SendlyException), 404 `whatsapp_sender_not_connected`. A 502
+     * SendlyException), 404 `whatsapp_sender_not_connected`. A 503
      * `whatsapp_profile_update_failed` means WhatsApp didn't take the photo
      * (another image may succeed). The client never retries this call after
      * a 5xx or a failed connection: it throws a SendlyException (or a
@@ -437,7 +429,7 @@ class WhatsAppSenders
      * Requires a live API key with the `whatsapp:write` scope and, in a team
      * workspace, an owner or admin (`settings:write`). A number that isn't
      * connected throws NotFoundException (404 `whatsapp_sender_not_connected`).
-     * A 502 `whatsapp_profile_update_failed` means WhatsApp didn't remove it;
+     * A 503 `whatsapp_profile_update_failed` means WhatsApp didn't remove it;
      * it is retried like any 5xx, then thrown as a SendlyException.
      *
      * @param string $phoneNumber Your WhatsApp-connected sending number, in E.164 format
@@ -462,7 +454,7 @@ class WhatsAppSenders
      * with the business for the first time; commands are shown when the
      * customer types "/". Needs the `whatsapp:read` scope; test keys work.
      * A number that isn't connected throws NotFoundException (404
-     * `whatsapp_sender_not_connected`). A 502
+     * `whatsapp_sender_not_connected`). A 503
      * `whatsapp_conversational_components_fetch_failed` means WhatsApp
      * couldn't be reached.
      *
@@ -494,7 +486,7 @@ class WhatsAppSenders
      * `invalid_request` and a message saying what to fix. Requires a live
      * API key with the `whatsapp:write` scope and, in a team workspace, an
      * owner or admin (`settings:write`). A number that isn't connected
-     * throws NotFoundException (404 `whatsapp_sender_not_connected`). A 502
+     * throws NotFoundException (404 `whatsapp_sender_not_connected`). A 503
      * `whatsapp_conversational_components_update_failed` means WhatsApp
      * didn't save them.
      *
@@ -537,7 +529,7 @@ class WhatsAppSenders
      * `voice_not_enabled`. WhatsApp only allows calling once the account may
      * message at least 2,000 people a day and the number's display name is
      * approved; until then it answers 422 `whatsapp_calling_unavailable`. A
-     * 502 `whatsapp_calling_update_failed` means WhatsApp couldn't be
+     * 503 `whatsapp_calling_update_failed` means WhatsApp couldn't be
      * reached. A number that isn't connected throws NotFoundException (404
      * `whatsapp_sender_not_connected`). The API has no endpoint for placing
      * WhatsApp calls. Requires
@@ -771,7 +763,7 @@ class WhatsAppTemplates
  * message templates, and send via
  * `$client->messages()->send(['channel' => 'whatsapp', ...])`.
  *
- * Connecting a number is a one-time $19 setup (no monthly fee). The first
+ * Connecting a number is free, with no monthly fee. The first
  * number ends with a human step: {@see WhatsAppSignup::create()} returns a
  * `connectUrl` that a person must open in a browser and log in with Facebook
  * to link their WhatsApp Business Account. Hand the URL to your user; that

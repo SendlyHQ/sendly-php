@@ -71,6 +71,10 @@ class Message
     public readonly ?array $mediaUrls;
     /** The batch the message was sent in; null when it was not sent in a batch */
     public readonly ?string $batchId;
+    /** On a WhatsApp message sent with 'fallbackToSms', what happened to its SMS fallback; null otherwise */
+    public readonly ?WhatsAppSmsFallback $fallback;
+    /** On an SMS fallback, the id of the WhatsApp message it replaced; null otherwise */
+    public readonly ?string $fallbackOf;
 
     /**
      * Create a Message from API response data
@@ -106,6 +110,9 @@ class Message
         $mediaUrls = $data['mediaUrls'] ?? $data['media_urls'] ?? null;
         $this->mediaUrls = is_array($mediaUrls) ? array_values($mediaUrls) : null;
         $this->batchId = $data['batchId'] ?? $data['batch_id'] ?? null;
+        $fallback = $data['fallback'] ?? null;
+        $this->fallback = is_array($fallback) ? new WhatsAppSmsFallback($fallback) : null;
+        $this->fallbackOf = $data['fallbackOf'] ?? $data['fallback_of'] ?? null;
     }
 
     /**
@@ -185,6 +192,8 @@ class Message
             'message_format' => $this->messageFormat,
             'media_urls' => $this->mediaUrls,
             'batch_id' => $this->batchId,
+            'fallback' => $this->fallback?->toArray(),
+            'fallback_of' => $this->fallbackOf,
         ];
     }
 

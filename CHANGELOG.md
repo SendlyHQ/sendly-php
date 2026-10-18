@@ -1,5 +1,15 @@
 # sendly/sendly-php
 
+## 4.5.0
+
+### Minor Changes
+
+- **WhatsApp to SMS fallback.** `messages()->send(['channel' => 'whatsapp', 'fallbackToSms' => true, ...])` sends `fallbackToSms` (as a boolean, and only when the key is present); it was dropped before. When WhatsApp can't deliver the message (the 24-hour window is closed, WhatsApp refuses it, or reports it undeliverable later), it goes as an SMS from the same number, billed as an SMS. The send's array then carries `fallback` (`channel`, `status`, `reason`, `messageId`, `creditsUsed`, `error`, `contentDropped`); when the SMS went in place of the WhatsApp message, `status` is `"failed"` and `fallback.status` is `"sent"`. The new `Sendly\WhatsAppSmsFallback` wraps that array with typed properties, `isPending()`, `isSent()`, `toArray()` and `STATUS_*` and `REASON_*` constants. `Message` gains `fallback` (a `WhatsAppSmsFallback`, on a WhatsApp message from `messages()->get()` or `messages()->list()`) and `fallbackOf` (on the SMS, the id of the WhatsApp message it replaced), and `toArray()` includes them as `fallback` and `fallback_of`. The number must already be able to send SMS to the recipient (US and Canada), or the API answers 403 `sms_fallback_unavailable` (a `SendlyException`); marketing and authentication templates, and media without a caption, get 422 `sms_fallback_not_supported` (a `ValidationException`). `getApiErrorCode()` returns either code. A 422 `whatsapp_window_closed` or `whatsapp_send_failed` from a send with `fallbackToSms` means the SMS couldn't go either, and its `getResponseBody()` carries `fallback` saying why.
+
+### Patch Changes
+
+- Docs give 503, the status the API sends, instead of 502 for the WhatsApp and voice errors raised when WhatsApp or the carrier couldn't be reached: `whatsapp_send_failed` when the message never reached WhatsApp (not sent, and safe to send again with the same idempotency key), the WhatsApp signup, profile, conversational-components and calling errors, `voice_attach_failed` and `carrier_refused`. The API answers every 502 as a 503 with a `Sendly-Upstream-Status: 502` header. Nothing changes at runtime.
+
 ## 4.3.0
 
 ### Minor Changes

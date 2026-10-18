@@ -456,7 +456,7 @@ breakers, commands and calling, create Meta-reviewed message templates, check
 24-hour conversation windows, and send WhatsApp messages by passing
 `'channel' => 'whatsapp'` to `messages()->send()`.
 
-Connecting a number is a one-time $19 setup (no monthly fee). The first number
+Connecting a number is free (no monthly fee either). The first number
 ends with a human step: the signup returns a `connectUrl` that a person must
 open in a browser and log in with Facebook to link their WhatsApp Business
 Account. More numbers can join that account without it: WhatsApp texts or
@@ -482,32 +482,33 @@ member (`templates:write`). A missing role returns 403
 `insufficient_permissions`.
 
 While WhatsApp connections are unavailable a Facebook signup answers 503
-`whatsapp_unavailable` before charging anything, with `retryAfter: 3600` in
+`whatsapp_unavailable`, with `retryAfter: 3600` in
 the body and a `Retry-After: 3600` header; the client retries it like any
-5xx, then throws `SendlyException`. Only signup returns it; no send does. If
-the connection fails, the $19 fee is refunded automatically; once a number
-has connected, a later disconnect gets nothing back. After 5 failed, charged signups in 24 hours it answers 429
+5xx, then throws `SendlyException`. Only signup returns it; no send does.
+After 5 failed signups in 24 hours it answers 429
 `whatsapp_signup_limit_reached`, thrown as `RateLimitException`: try again the
 next day. A send WhatsApp refuses throws `ValidationException` (422
 `whatsapp_send_failed`, final; cached under the idempotency key and replayed
-for 24 hours). A 502 `whatsapp_send_failed` means the message provably never
-reached the carrier, so it was not sent and is safe to send again; it is never
-cached, and is retried like any 5xx under the same idempotency key. Neither is
-charged. A 409 `whatsapp_send_unconfirmed` (`SendlyException`) means the
+for 24 hours). A 503 `whatsapp_send_failed` means the message provably never
+reached WhatsApp, so it was not sent and is safe to resend under the same
+idempotency key; it is never cached, and the client retries it automatically,
+up to 3 times under the same key, before throwing. Neither is charged. With
+`'fallbackToSms' => true`, a 422 means the SMS couldn't go either; see
+[SMS fallback](#sms-fallback). A 409 `whatsapp_send_unconfirmed` (`SendlyException`) means the
 outcome is unknown: the message was marked failed and refunded but may still
 be delivered, so check before sending it again (it could arrive twice). It is
 not retried automatically.
 
-Adding a number with `businessAccountId` runs the same number checks, fee,
-refund and daily limit as a Facebook connection. It answers 404
+Adding a number with `businessAccountId` is free too, and runs the same number
+checks and daily limit as a Facebook connection. It answers 404
 `whatsapp_business_account_not_found` when no connected account with that id
 is in the workspace, 400 `display_name_required` when neither you nor the
 account supplies a display name, and `whatsapp_verification_start_failed`
-when WhatsApp won't send the code (422 refused, 502 unreachable; the signup
-fails and the fee is refunded). The client never retries these three calls
+when WhatsApp won't send the code (422 refused, 503 unreachable; the signup
+fails). The client never retries these three calls
 after a 5xx or a failed connection; it throws at once instead: `create()` with
-`businessAccountId` (a retry could start another signup with its own charge
-and refund that counts toward the daily limit), `verify()` (every submission
+`businessAccountId` (a retry could start another signup that counts toward
+the daily limit), `verify()` (every submission
 uses up one of the five attempts) and `uploadProfilePhoto()`. `resend()` is
 retried like any other call. `verify()` and `resend()` need the same scope,
 key and role as signup. The profile photo, ice breakers and commands, and calling
@@ -537,18 +538,18 @@ and destination country; countries without a listed price use 33
 gives its slot back.
 
 ```php
-// 1. Connect a number ($19 one-time). A human must finish the connect URL.
+// 1. Connect a number (free). A human must finish the connect URL.
 $signup = $client->whatsapp()->signup->create('+12125550147');
 echo $signup['connectUrl']; // hand this to a person to complete in a browser
 
 // Poll until active. After the Facebook step the signup stays "registering"
 // while WhatsApp activates the number. Activation usually takes a few minutes
 // but can take hours. If it hasn't finished about 6 hours after the session
-// began, the session fails with registration_timeout and the fee is refunded.
+// began, the session fails with registration_timeout.
 $status = $client->whatsapp()->signup->get($signup['id']);
 echo $status['status']; // "initiated" -> "registering" -> "active" (or "failed")
 if ($status['status'] === 'failed') {
-    print_r($status['failureReasons']); // e.g. ['waba_mismatch']; the fee is refunded
+    print_r($status['failureReasons']); // e.g. ['waba_mismatch']
 }
 
 // List connected senders
@@ -559,7 +560,7 @@ foreach ($result['senders'] as $s) {
     // $s['outboundCallingAllowed']
 }
 
-// Add another number to a connected account ($19 one-time, no Facebook step).
+// Add another number to a connected account (free, no Facebook step).
 // Take the account id from an active sender: the list is newest first, and a
 // pending sender's businessAccountId is null. A null id starts a Facebook
 // connection instead, and a blank one is refused.
@@ -587,7 +588,7 @@ if ($code !== null) {
     } catch (\Sendly\Exceptions\ValidationException $e) {
         // 422 whatsapp_verification_code_invalid. The fifth wrong code throws
         // SendlyException (409 whatsapp_verification_failed) instead: the
-        // signup fails and the fee is refunded.
+        // signup fails.
         echo $e->getResponseBody()['attemptsRemaining'];
     }
 } else {
@@ -693,7 +694,87 @@ $client->messages()->send([
     'mediaUrls' => ['https://acme.example/receipt.pdf'],
     'text' => 'Here is your receipt.',
 ]);
+
 ```
+
+### SMS fallback
+
+Pass `'fallbackToSms' => true` and a WhatsApp message that can't be delivered
+goes as an SMS from the same number instead.
+
+```php
+use Sendly\Exceptions\SendlyException;
+use Sendly\Exceptions\ValidationException;
+use Sendly\WhatsAppSmsFallback;
+
+try {
+    $message = $client->messages()->send([
+        'channel' => 'whatsapp',
+        'to' => '+12125550123',
+        'from' => '+12125550147',
+        'text' => 'Your table is ready!',
+        'fallbackToSms' => true,
+    ]);
+
+    $fallback = new WhatsAppSmsFallback($message['fallback']);
+    echo $fallback->status;  // "pending", "sent", "failed", "unavailable" or "skipped"
+    echo $fallback->reason;  // "window_closed", "whatsapp_refused" or "whatsapp_failed"
+    if ($fallback->isSent()) {
+        // The SMS went instead ($message['status'] is "failed")
+        $sms = $client->messages()->get($fallback->messageId);
+        echo $sms->fallbackOf; // the WhatsApp message's id
+    }
+} catch (ValidationException $e) {
+    $body = $e->getResponseBody();
+    if ($e->getApiErrorCode() === 'sms_fallback_not_supported') {
+        // 422: marketing_template, authentication_template or media_without_caption
+        echo $body['reason'];
+    } elseif (isset($body['fallback'])) {
+        // 422 whatsapp_window_closed or whatsapp_send_failed: the SMS couldn't go
+        // either. A closed window also carries the WhatsApp message's id.
+        $fallback = new WhatsAppSmsFallback($body['fallback']);
+        echo "{$e->getApiErrorCode()}: {$fallback->status} {$fallback->error}";
+    } else {
+        throw $e;
+    }
+} catch (SendlyException $e) {
+    if ($e->getApiErrorCode() !== 'sms_fallback_unavailable') {
+        throw $e;
+    }
+    // 403: this number can't send SMS to the recipient; nothing was sent
+}
+```
+
+- It falls back when the 24-hour window is closed (the SMS goes at once:
+  free-form text and media go only within 24 hours of the customer's last
+  message, templates any time), when WhatsApp refuses the message, or when
+  WhatsApp reports it undeliverable later. Never after WhatsApp reports it
+  delivered or read, and at most once per message.
+- The number must already be able to send SMS to the recipient (a verified
+  toll-free number, or a local number on a 10DLC campaign, to a US or Canada
+  number), or the send is refused with 403 `sms_fallback_unavailable`
+  before anything is sent.
+- Marketing and authentication templates, and media without a caption, can't
+  fall back: 422 `sms_fallback_not_supported`. A utility template falls
+  back as its text header, body and footer with the variables filled in, and
+  its URL and phone buttons as `label: target`; quick replies are dropped and
+  listed in `contentDropped`.
+- Billing: the WhatsApp charge is refunded (a closed window is never charged)
+  and the SMS is billed as an SMS. A message that fell back at once comes
+  back with `status` `"failed"`, `creditsUsed` 0 and `fallback.status` `"sent"`; the fallback's `creditsUsed` is
+  what the SMS cost.
+- No SMS goes on a 409 `whatsapp_send_unconfirmed` or a 503
+  `whatsapp_send_failed`. The status is `"unavailable"` when SMS rules stop it
+  (the contact opted out, a promotional-looking text in the recipient's quiet
+  hours, restricted content), with the reason in its `error`, and
+  `"skipped"` for a WhatsApp error an SMS can't fix.
+- There is no time-based fallback: a message WhatsApp accepted but hasn't
+  delivered, for example to a phone that is off, stays `"pending"`, and no SMS
+  goes unless WhatsApp later reports a failure.
+- `messages()->get()` and `messages()->list()` return the same fallback (as `$message->fallback`, a `WhatsAppSmsFallback`) on the WhatsApp message, so check a
+  pending one later. The SMS carries `$message->fallbackOf`, the WhatsApp message's id.
+
+Guide: [Send WhatsApp with an SMS Fallback](https://sendly.live/docs/whatsapp/send-with-fallback).
 
 ## RCS
 
@@ -1093,10 +1174,10 @@ and `e911_not_applicable` (400, `ValidationException`); `invalid_address`
 `suggested` in `getResponseBody()`); `agent_disabled` (409, switch the agent
 on first), `agent_limit` (409) and `agent_in_use` (409, the numbers the agent
 still answers under `numbers` in `getResponseBody()`); `voice_attach_failed`
-(502, try again); `carrier_refused` (502, try again, unless the message says
+(503, try again); `carrier_refused` (503, try again, unless the message says
 the number couldn't be found for emergency registration: contact support); and
 `voice_unavailable` (503). The
-409, 502 and 503 refusals arrive as `SendlyException` with `getCode()` and
+409 and 503 refusals arrive as `SendlyException` with `getCode()` and
 `getApiErrorCode()` set, and `CallErrorCode` holds every code.
 
 ## Webhooks
