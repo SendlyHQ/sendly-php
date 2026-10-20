@@ -616,7 +616,7 @@ class WhatsAppExtrasTest extends TestCase
         $client = $this->createMockClient([
             $this->apiError('POST', '/whatsapp/signup', 502, [
                 'error' => 'whatsapp_verification_start_failed',
-                'message' => "WhatsApp couldn't start verifying this number.. Please try again shortly.",
+                'message' => "WhatsApp couldn't start verifying this number. Any setup fee is refunded automatically. Please try again shortly.",
             ]),
             new Response(201, [], json_encode($this->verifyingSignup())),
         ]);
@@ -629,7 +629,7 @@ class WhatsAppExtrasTest extends TestCase
             $this->assertSame(502, $e->getCode());
             $this->assertSame('whatsapp_verification_start_failed', $e->getApiErrorCode());
         }
-        $this->assertCount(1, $this->history, 'each retry would start another signup');
+        $this->assertCount(1, $this->history, 'each retry would start, charge and refund another signup');
     }
 
     public function testSignupCreateByCodeServerErrorIsNotRetried(): void
@@ -637,7 +637,7 @@ class WhatsAppExtrasTest extends TestCase
         $client = $this->createMockClient([
             $this->apiError('POST', '/whatsapp/signup', 500, [
                 'error' => 'internal_error',
-                'message' => 'Something went wrong asking WhatsApp for the code.. Please try again.',
+                'message' => 'Something went wrong asking WhatsApp for the code. Any setup fee is refunded automatically. Please try again.',
             ]),
             new Response(201, [], json_encode($this->verifyingSignup())),
         ]);
@@ -695,7 +695,7 @@ class WhatsAppExtrasTest extends TestCase
         $client = $this->createMockClient([
             $this->apiError('POST', '/whatsapp/signup', 422, [
                 'error' => 'whatsapp_verification_start_failed',
-                'message' => 'WhatsApp refused to verify this number..',
+                'message' => 'WhatsApp refused to verify this number. Any setup fee is refunded automatically.',
             ]),
         ]);
 
@@ -804,7 +804,7 @@ class WhatsAppExtrasTest extends TestCase
         $client = $this->createMockClient([
             $this->apiError('POST', '/whatsapp/signup/was_add_1/verify', 409, [
                 'error' => 'whatsapp_verification_failed',
-                'message' => 'Too many wrong codes.. Start again to retry.',
+                'message' => 'Too many wrong codes. Any setup fee is refunded automatically. Start again to retry.',
             ]),
         ]);
 

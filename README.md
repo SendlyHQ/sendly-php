@@ -456,7 +456,7 @@ breakers, commands and calling, create Meta-reviewed message templates, check
 24-hour conversation windows, and send WhatsApp messages by passing
 `'channel' => 'whatsapp'` to `messages()->send()`.
 
-Connecting a number is free (no monthly fee either). The first number
+Connecting a number costs a one-time $9.99 fee (no monthly fee). The first number
 ends with a human step: the signup returns a `connectUrl` that a person must
 open in a browser and log in with Facebook to link their WhatsApp Business
 Account. More numbers can join that account without it: WhatsApp texts or
@@ -482,10 +482,13 @@ member (`templates:write`). A missing role returns 403
 `insufficient_permissions`.
 
 While WhatsApp connections are unavailable a Facebook signup answers 503
-`whatsapp_unavailable`, with `retryAfter: 3600` in
+`whatsapp_unavailable` before charging anything, with `retryAfter: 3600` in
 the body and a `Retry-After: 3600` header; the client retries it like any
-5xx, then throws `SendlyException`. Only signup returns it; no send does.
-After 5 failed signups in 24 hours it answers 429
+5xx, then throws `SendlyException`. Only signup returns it; no send does. The
+one-time $9.99 connection fee is charged to your card when you start
+connecting a number and refunded automatically if the connection fails; it is
+not refundable once the number is connected, and a later disconnect gets
+nothing back. After 5 failed, charged signups in 24 hours it answers 429
 `whatsapp_signup_limit_reached`, thrown as `RateLimitException`: try again the
 next day. A send WhatsApp refuses throws `ValidationException` (422
 `whatsapp_send_failed`, final; cached under the idempotency key and replayed
@@ -499,16 +502,16 @@ outcome is unknown: the message was marked failed and refunded but may still
 be delivered, so check before sending it again (it could arrive twice). It is
 not retried automatically.
 
-Adding a number with `businessAccountId` is free too, and runs the same number
-checks and daily limit as a Facebook connection. It answers 404
+Adding a number with `businessAccountId` runs the same number checks, fee,
+refund and daily limit as a Facebook connection. It answers 404
 `whatsapp_business_account_not_found` when no connected account with that id
 is in the workspace, 400 `display_name_required` when neither you nor the
 account supplies a display name, and `whatsapp_verification_start_failed`
 when WhatsApp won't send the code (422 refused, 503 unreachable; the signup
-fails). The client never retries these three calls
+fails and the fee is refunded). The client never retries these three calls
 after a 5xx or a failed connection; it throws at once instead: `create()` with
-`businessAccountId` (a retry could start another signup that counts toward
-the daily limit), `verify()` (every submission
+`businessAccountId` (a retry could start another signup with its own charge
+and refund that counts toward the daily limit), `verify()` (every submission
 uses up one of the five attempts) and `uploadProfilePhoto()`. `resend()` is
 retried like any other call. `verify()` and `resend()` need the same scope,
 key and role as signup. The profile photo, ice breakers and commands, and calling
@@ -538,18 +541,18 @@ and destination country; countries without a listed price use 33
 gives its slot back.
 
 ```php
-// 1. Connect a number (free). A human must finish the connect URL.
+// 1. Connect a number ($9.99 one-time). A human must finish the connect URL.
 $signup = $client->whatsapp()->signup->create('+12125550147');
 echo $signup['connectUrl']; // hand this to a person to complete in a browser
 
 // Poll until active. After the Facebook step the signup stays "registering"
 // while WhatsApp activates the number. Activation usually takes a few minutes
 // but can take hours. If it hasn't finished about 6 hours after the session
-// began, the session fails with registration_timeout.
+// began, the session fails with registration_timeout and the fee is refunded.
 $status = $client->whatsapp()->signup->get($signup['id']);
 echo $status['status']; // "initiated" -> "registering" -> "active" (or "failed")
 if ($status['status'] === 'failed') {
-    print_r($status['failureReasons']); // e.g. ['waba_mismatch']
+    print_r($status['failureReasons']); // e.g. ['waba_mismatch']; the fee is refunded
 }
 
 // List connected senders
@@ -560,7 +563,7 @@ foreach ($result['senders'] as $s) {
     // $s['outboundCallingAllowed']
 }
 
-// Add another number to a connected account (free, no Facebook step).
+// Add another number to a connected account ($9.99 one-time, no Facebook step).
 // Take the account id from an active sender: the list is newest first, and a
 // pending sender's businessAccountId is null. A null id starts a Facebook
 // connection instead, and a blank one is refused.
@@ -588,7 +591,7 @@ if ($code !== null) {
     } catch (\Sendly\Exceptions\ValidationException $e) {
         // 422 whatsapp_verification_code_invalid. The fifth wrong code throws
         // SendlyException (409 whatsapp_verification_failed) instead: the
-        // signup fails.
+        // signup fails and the fee is refunded.
         echo $e->getResponseBody()['attemptsRemaining'];
     }
 } else {

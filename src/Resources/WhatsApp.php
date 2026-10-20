@@ -22,59 +22,65 @@ class WhatsAppSignup
     /**
      * Start connecting a number to WhatsApp.
      *
-     * Connecting a number is free, with no monthly fee. Returns a
+     * Charges a one-time $9.99 connection fee per number (no monthly fee) to
+     * your card when the connection starts, and returns a
      * `connectUrl`. Completing the connection requires a human: hand the URL
      * to your user — they open it in a browser and log in with Facebook to
      * link their WhatsApp Business Account. Then poll {@see get()} until the
      * status is `active`.
      *
      * Calling again for a number with an in-flight signup returns the
-     * existing signup (same `connectUrl`). Requires a live API key with the
-     * `whatsapp:write` scope (a test key gets 403
+     * existing signup (same `connectUrl`) without charging again. Requires a
+     * live API key with the `whatsapp:write` scope (a test key gets 403
      * `whatsapp_requires_live_key`) and, in a team workspace, an owner or
      * admin (`settings:write`). After the Facebook step the signup stays
      * `registering` while WhatsApp activates the number. Activation usually
      * takes a few minutes but can take hours. If it hasn't finished about 6
      * hours after the session began, the session fails with
-     * `registration_timeout`.
+     * `registration_timeout` and the fee is refunded. If the connection
+     * fails, the $9.99 fee is refunded automatically; once the number has
+     * connected it is not refundable, and a later disconnect gets nothing
+     * back.
      *
      * While WhatsApp connections are unavailable the API answers a Facebook
-     * connection with 503 `whatsapp_unavailable`, with `retryAfter: 3600` in
-     * the body and a `Retry-After: 3600` header. Only signup returns it; no
-     * send does. The client retries it like any 5xx before throwing a
-     * SendlyException. After 5 failed signups (or 20 cancelled) in 24 hours
-     * it answers 429 `whatsapp_signup_limit_reached`, thrown as a
-     * RateLimitException; try again the next day.
+     * connection with 503 `whatsapp_unavailable` before charging anything,
+     * with `retryAfter: 3600` in the body and a `Retry-After: 3600` header.
+     * Only signup returns it; no send does. The client retries it like any
+     * 5xx before throwing a SendlyException. After 5 failed, charged signups
+     * (or 20 cancelled) in 24 hours it answers 429
+     * `whatsapp_signup_limit_reached`, thrown as a RateLimitException; try
+     * again the next day.
      *
      * To add another number to a WhatsApp Business Account this workspace has
      * already connected, pass its `businessAccountId` (as reported on
      * {@see WhatsAppSenders::list()} and on a signup). There is no Facebook
-     * step and no `connectUrl`: the same eligibility checks and limit apply,
-     * connecting is free, WhatsApp sends the number a 6-digit code by text
+     * step and no `connectUrl`: the same eligibility checks, $9.99 fee, refund
+     * and limit apply, WhatsApp sends the number a 6-digit code by text
      * (`verificationMethod` `sms`, the default) or voice call (`voice`), and
      * the signup comes back `verifying`. Submit the code with
      * {@see verify()}; {@see get()} also returns it as `verificationCode`
      * once the text has reached the number. Calling again for a number that
-     * is already verifying returns the same signup without sending a second
-     * code; a verifying signup more than 3 hours old fails with
-     * `verification_expired` and a new one starts instead. `displayName` (at
-     * most 512 characters) defaults to the display name of the account's
-     * connected number, then its business name; with neither the API answers
-     * 400 `display_name_required`. Other refusals: 404
+     * is already verifying returns the same signup without charging again
+     * or sending a second code; a verifying signup more than 3 hours old
+     * fails with `verification_expired` (its fee is refunded) and a new one,
+     * with its own fee, starts instead. `displayName` (at most 512 characters)
+     * defaults to the display name of the account's connected number, then
+     * its business name; with neither the API answers 400
+     * `display_name_required`. Other refusals: 404
      * `whatsapp_business_account_not_found` (no connected account with that
      * id, with at least one active number, in this workspace), 409
      * `whatsapp_signup_in_progress` (a Facebook connection for the number is
      * under way; the body's `id` is that signup), 409
      * `whatsapp_already_enabled`, and `whatsapp_verification_start_failed`
      * when WhatsApp won't send the code: a 422 when it refused (final), a 503
-     * when it couldn't be reached. Either way the signup fails. With
-     * `businessAccountId` the client never retries a 5xx or a failed
-     * connection: it throws the 503 as a SendlyException (a failed connection
-     * as a NetworkException) at once, since each retry could start a new
-     * signup that counts toward the daily limit. Check with {@see get()} or
-     * call again when you are ready. Without `businessAccountId`, a number
-     * that is verifying answers 409 `whatsapp_verification_in_progress`, with
-     * the signup's `id` in the body.
+     * when it couldn't be reached. Either way the signup fails and the fee is
+     * refunded. With `businessAccountId` the client never retries a 5xx or a
+     * failed connection: it throws the 503 as a SendlyException (a failed
+     * connection as a NetworkException) at once, since each retry could start
+     * a new signup with its own charge and refund that counts toward the
+     * daily limit. Check with {@see get()} or call again when you are ready.
+     * Without `businessAccountId`, a number that is verifying answers 409
+     * `whatsapp_verification_in_progress`, with the signup's `id` in the body.
      *
      * @param string $phoneNumber The number to connect, in E.164 format. Must
      *   be an active number in your workspace (provisioned, purchased, or
@@ -140,7 +146,7 @@ class WhatsAppSignup
      *   not counted, so the same unchecked code can come back, and
      *   submitting it again with {@see verify()} is safe.
      *   `failureReasons` is set only when status is `failed`, with one code:
-     *   `setup_fee_payment_failed` (the connection couldn't be started),
+     *   `setup_fee_payment_failed`,
      *   `signup_abandoned`, `meta_exchange_failed`, `registration_failed`,
      *   `waba_already_connected`, `waba_mismatch` (the WhatsApp Business
      *   Account chosen in the Facebook step doesn't hold the verified
@@ -150,7 +156,8 @@ class WhatsAppSignup
      *   `verification_failed` (too many wrong codes) or
      *   `verification_expired` (no code was submitted or requested for an
      *   hour or more, or the signup was more than 3 hours old when the
-     *   number was added again).
+     *   number was added again). If the connection fails, the $9.99 fee is
+     *   refunded automatically.
      * @throws ValidationException If ID is empty.
      */
     public function get(string $id): array
@@ -176,7 +183,7 @@ class WhatsAppSignup
      * `whatsapp_verification_code_invalid` (wrong code;
      * `getResponseBody()['attemptsRemaining']` says how many tries are left),
      * 409 `whatsapp_verification_failed` (the fifth wrong code: the signup
-     * fails and `whatsapp_account.failed` fires), 409
+     * fails, the fee is refunded and `whatsapp_account.failed` fires), 409
      * `whatsapp_verification_busy` (another code for the number is being
      * checked; try again in a moment), 409 `signup_not_active` (the signup
      * isn't waiting for a code, or is more than 3 hours old) and 404
@@ -763,7 +770,7 @@ class WhatsAppTemplates
  * message templates, and send via
  * `$client->messages()->send(['channel' => 'whatsapp', ...])`.
  *
- * Connecting a number is free, with no monthly fee. The first
+ * Connecting a number costs a one-time $9.99 fee (no monthly fee). The first
  * number ends with a human step: {@see WhatsAppSignup::create()} returns a
  * `connectUrl` that a person must open in a browser and log in with Facebook
  * to link their WhatsApp Business Account. Hand the URL to your user; that
