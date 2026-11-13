@@ -94,6 +94,8 @@ final class CallErrorCode
     public const AGENT_REQUIRED = 'agent_required';
     public const AGENT_NOT_FOUND = 'agent_not_found';
     public const AGENT_DISABLED = 'agent_disabled';
+    public const AGENT_KIND_UNSUPPORTED = 'agent_kind_unsupported';
+    public const BYO_AGENTS_NOT_ENABLED = 'byo_agents_not_enabled';
     public const INVALID_METADATA = 'invalid_metadata';
     public const INVALID_REQUEST = 'invalid_request';
     public const INVALID_NUMBER = 'invalid_number';
@@ -108,6 +110,11 @@ final class CallErrorCode
     public const DAILY_CALL_LIMIT = 'daily_call_limit';
     public const RATE_LIMIT_EXCEEDED = 'rate_limit_exceeded';
     public const CALL_NOT_FOUND = 'call_not_found';
+    public const CALL_NOT_ACTIVE = 'call_not_active';
+    public const CALL_NOT_TRANSFERABLE = 'call_not_transferable';
+    public const TRANSFER_IN_PROGRESS = 'transfer_in_progress';
+    public const TRANSFER_TO_REQUIRED = 'transfer_to_required';
+    public const OUTBOUND_NOT_ENABLED = 'outbound_not_enabled';
     public const LIVE_KEY_REQUIRED = 'live_key_required';
     public const FORBIDDEN = 'forbidden';
     public const INSUFFICIENT_PERMISSIONS = 'insufficient_permissions';
@@ -125,8 +132,8 @@ final class CallErrorCode
  * Calls resource: phone calls handled by your AI agents.
  *
  * Place an outbound phone call that one of your workspace's AI agents
- * handles, list and inspect calls, end a call early, and fetch a call's
- * recording. Switching voice on for a number, choosing how it answers,
+ * handles, list and inspect calls, hand the caller on an incoming call to
+ * another number, end a call early, and fetch a call's recording. Switching voice on for a number, choosing how it answers,
  * registering an emergency address and creating agents are done with
  * {@see Voice} (`$client->voice`) or in the dashboard;
  * `$client->voice->numbers->list()` reports `voiceEnabled`, `voiceMode` and
@@ -148,8 +155,17 @@ final class CallErrorCode
  * scope, writes `calls:write`; writes also need a live key (a test key
  * gets 403 `live_key_required`).
  *
+ * A call's `agentKind` is the {@see VoiceAgentKind} of the agent that
+ * answered (null when no agent handled it). `agentFallback` is true when
+ * your own agent could not be reached or dropped, so Sendly said a short
+ * line and transferred the caller or took a message. `transfer` is null
+ * until the call is transferred, then the latest transfer: `to`, `status`
+ * (a {@see CallTransferStatus}) and `failureReason` (a
+ * {@see CallTransferFailureReason}, null unless the transfer failed).
+ *
  * @phpstan-type CallTranscriptLine array{speaker: string, text: string, atMs: int}
- * @phpstan-type Call array{id: string, object: string, kind: string, channel: string, direction: string, status: string, handledBy: string, agentId: ?string, from: ?string, to: ?string, callerName: ?string, calleeName: ?string, startedAt: string, answeredAt: ?string, endedAt: ?string, durationSecs: int, creditsCharged: int, billing: string, hangupClass: ?string, recordingStatus: ?string, metadata: array<string, string>, transcript?: array<int, CallTranscriptLine>}
+ * @phpstan-type CallTransfer array{to: string, status: string, failureReason: ?string}
+ * @phpstan-type Call array{id: string, object: string, kind: string, channel: string, direction: string, status: string, handledBy: string, agentId: ?string, from: ?string, to: ?string, callerName: ?string, calleeName: ?string, startedAt: string, answeredAt: ?string, endedAt: ?string, durationSecs: int, creditsCharged: int, billing: string, hangupClass: ?string, agentKind: ?string, agentFallback: bool, transfer: ?CallTransfer, recordingStatus: ?string, metadata: array<string, string>, transcript?: array<int, CallTranscriptLine>}
  * @phpstan-type CallPagination array{total: int, limit: int, offset: int, hasMore: bool}
  * @phpstan-type CallRecording array{callId: string, status: string, url: ?string, expiresAt: ?string, contentType: ?string}
  *
@@ -185,7 +201,10 @@ class Calls
      * 428 `e911_required` (register an emergency address for the number
      * first with {@see VoiceNumbers::registerEmergencyAddress()}), 409 `lines_busy` (every line is in use; the
      * client throws at once rather than retrying, so try again in a moment)
-     * and 429 `daily_call_limit`. See {@see CallErrorCode} for the full set.
+     * and 429 `daily_call_limit`. An agent whose `kind` is `sip` or
+     * `websocket` answers incoming calls only and gets 409
+     * `agent_kind_unsupported`; a `custom_llm` agent can place calls. See
+     * {@see CallErrorCode} for the full set.
      *
      * Requires a live API key with the `calls:write` scope. The POST
      * carries an `Idempotency-Key`; pass your own to make a retry from
@@ -229,10 +248,12 @@ class Calls
      *
      * Requires an API key with the `calls:read` scope.
      *
-     * @param array{limit?: int, offset?: int, status?: string, direction?: string, kind?: string, agentId?: string, to?: string, from?: string} $options
+     * @param array{limit?: int, offset?: int, status?: string, direction?: string, kind?: string, agentId?: string, agentKind?: string, to?: string, from?: string} $options
      *   `limit` is 1 to 100 (default 50), `offset` 0 or more (default 0);
      *   `status` is a {@see CallStatus}, `direction` a {@see CallDirection},
-     *   `kind` a {@see CallKind}.
+     *   `kind` a {@see CallKind}, `agentKind` a {@see VoiceAgentKind} (only
+     *   calls answered by that kind of agent; calls from before agent kinds
+     *   existed count as `sendly`).
      * @return array{data: array<int, Call>, pagination: CallPagination}
      */
     public function list(array $options = []): array
@@ -244,6 +265,7 @@ class Calls
             'direction' => $options['direction'] ?? null,
             'kind' => $options['kind'] ?? null,
             'agentId' => $options['agentId'] ?? null,
+            'agentKind' => $options['agentKind'] ?? null,
             'to' => $options['to'] ?? null,
             'from' => $options['from'] ?? null,
         ], fn($v) => $v !== null);
@@ -298,6 +320,52 @@ class Calls
         }
 
         return $this->client->post('/calls/' . rawurlencode($id) . '/hangup', [], $idempotencyKey);
+    }
+
+    /**
+     * Transfer the caller on an incoming phone call to another number,
+     * whatever kind of agent is on the call.
+     *
+     * `to` is a US or Canadian number in E.164 format that is not
+     * premium-rate, not the number the caller dialled and not a number the
+     * agent answers. Left out (or null), the caller goes to the agent's
+     * transfer number (`tools.transferTo`); any other number needs calling
+     * out switched on for the workspace. The call is returned at once (202)
+     * with `transfer.status` `pending`. Follow the outcome with
+     * {@see get()} (`transfer.status`): once the caller is handed over the
+     * call ends `completed` with `hangupClass` `transferred`, and a failed
+     * transfer leaves the caller on the call.
+     *
+     * Refusals you should handle: 400 `invalid_request` (a `to` that breaks
+     * the rules above) and 400 `transfer_to_required` (no `to` and the agent
+     * has no transfer number), both `ValidationException`; 402
+     * `insufficient_credits` (`InsufficientCreditsException`; the workspace
+     * has no credits left); 403 `outbound_not_enabled` (`to` is not the
+     * agent's transfer number and calling out is off); 404 `call_not_found`;
+     * 409 `call_not_active` (the call is not in progress),
+     * `call_not_transferable` (not an incoming phone call) and
+     * `transfer_in_progress` (a transfer is under way, or the call has had 3
+     * transfer attempts).
+     *
+     * Requires a live API key with the `calls:write` scope.
+     *
+     * @param string $id Call ID
+     * @param string|null $to Number to transfer the caller to, in E.164
+     *   format. Null uses the agent's transfer number.
+     * @param string|null $idempotencyKey Idempotency key (1-255 printable
+     *   ASCII characters). Overrides the auto-generated per-request key.
+     * @return Call The call, `transfer.status` `pending`.
+     * @throws ValidationException If ID is empty.
+     */
+    public function transfer(string $id, ?string $to = null, ?string $idempotencyKey = null): array
+    {
+        if (empty($id)) {
+            throw new ValidationException('Call ID is required');
+        }
+
+        $body = $to !== null ? ['to' => $to] : [];
+
+        return $this->client->post('/calls/' . rawurlencode($id) . '/transfer', $body, $idempotencyKey);
     }
 
     /**

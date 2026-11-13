@@ -23,6 +23,9 @@ use Sendly\Resources\CallHandledBy;
 use Sendly\Resources\CallKind;
 use Sendly\Resources\CallRecordingStatus;
 use Sendly\Resources\CallStatus;
+use Sendly\Resources\CallTransferFailureReason;
+use Sendly\Resources\CallTransferStatus;
+use Sendly\Resources\VoiceAgentKind;
 use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\ValidationException;
 use Sendly\Exceptions\NotFoundException;
@@ -31,7 +34,7 @@ use Sendly\Exceptions\RateLimitException;
 use ReflectionClass;
 
 /**
- * Tests for the Calls resource: create(), list(), get(), hangup(), recording()
+ * Tests for the Calls resource: create(), list(), get(), hangup(), transfer(), recording()
  */
 class CallsTest extends TestCase
 {
@@ -102,6 +105,9 @@ class CallsTest extends TestCase
             'creditsCharged' => 0,
             'billing' => 'metered',
             'hangupClass' => null,
+            'agentKind' => 'sendly',
+            'agentFallback' => false,
+            'transfer' => null,
             'recordingStatus' => null,
             'metadata' => [],
         ], $overrides);
@@ -133,6 +139,20 @@ class CallsTest extends TestCase
         $this->assertSame('voice_not_enabled', CallErrorCode::VOICE_NOT_ENABLED);
         $this->assertSame('e911_required', CallErrorCode::E911_REQUIRED);
         $this->assertSame('call_not_found', CallErrorCode::CALL_NOT_FOUND);
+        $this->assertSame('pending', CallTransferStatus::PENDING);
+        $this->assertSame('completed', CallTransferStatus::COMPLETED);
+        $this->assertSame('failed', CallTransferStatus::FAILED);
+        $this->assertSame('busy', CallTransferFailureReason::BUSY);
+        $this->assertSame('no_answer', CallTransferFailureReason::NO_ANSWER);
+        $this->assertSame('declined', CallTransferFailureReason::DECLINED);
+        $this->assertSame('unavailable', CallTransferFailureReason::UNAVAILABLE);
+        $this->assertSame('unknown', CallTransferFailureReason::UNKNOWN);
+        $this->assertSame('agent_kind_unsupported', CallErrorCode::AGENT_KIND_UNSUPPORTED);
+        $this->assertSame('transfer_to_required', CallErrorCode::TRANSFER_TO_REQUIRED);
+        $this->assertSame('outbound_not_enabled', CallErrorCode::OUTBOUND_NOT_ENABLED);
+        $this->assertSame('call_not_active', CallErrorCode::CALL_NOT_ACTIVE);
+        $this->assertSame('call_not_transferable', CallErrorCode::CALL_NOT_TRANSFERABLE);
+        $this->assertSame('transfer_in_progress', CallErrorCode::TRANSFER_IN_PROGRESS);
     }
 
     public function testCallChannelConstantsMatchTheWire(): void
@@ -435,6 +455,7 @@ class CallsTest extends TestCase
             'direction' => CallDirection::OUTBOUND,
             'kind' => CallKind::PSTN,
             'agentId' => self::AGENT_ID,
+            'agentKind' => VoiceAgentKind::CUSTOM_LLM,
             'to' => '+15555550123',
             'from' => '+15555550188',
         ]);
@@ -447,6 +468,7 @@ class CallsTest extends TestCase
             'direction' => 'outbound',
             'kind' => 'pstn',
             'agentId' => self::AGENT_ID,
+            'agentKind' => 'custom_llm',
             'to' => '+15555550123',
             'from' => '+15555550188',
         ], $query);
@@ -455,6 +477,21 @@ class CallsTest extends TestCase
         $this->assertSame(132, $result['pagination']['total']);
         $this->assertTrue($result['pagination']['hasMore']);
         $this->assertSame('completed', $result['data'][0]['status']);
+    }
+
+    public function testListFiltersByAgentKind(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode([
+                'data' => [$this->call(['agentKind' => 'websocket'])],
+                'pagination' => ['total' => 1, 'limit' => 50, 'offset' => 0, 'hasMore' => false],
+            ])),
+        ]);
+
+        $result = $client->calls()->list(['agentKind' => VoiceAgentKind::WEBSOCKET]);
+
+        $this->assertSame('agentKind=websocket', $this->lastRequest()->getUri()->getQuery());
+        $this->assertSame(VoiceAgentKind::WEBSOCKET, $result['data'][0]['agentKind']);
     }
 
     public function testListKeepsZeroOffset(): void
@@ -545,6 +582,45 @@ class CallsTest extends TestCase
         $this->assertSame(CallBilling::UNBILLED, $result['billing']);
     }
 
+    public function testGetReportsAgentKindFallbackAndAFailedTransfer(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode($this->call([
+                'direction' => 'inbound',
+                'status' => 'active',
+                'agentKind' => 'sip',
+                'agentFallback' => true,
+                'transfer' => ['to' => '+15555550190', 'status' => 'failed', 'failureReason' => 'no_answer'],
+            ]))),
+            new Response(200, [], json_encode($this->call([
+                'agentKind' => 'hologram',
+                'transfer' => ['to' => '+15555550190', 'status' => 'parked', 'failureReason' => null],
+            ]))),
+            new Response(200, [], json_encode($this->call([
+                'handledBy' => 'dashboard',
+                'agentId' => null,
+                'agentKind' => null,
+            ]))),
+        ]);
+
+        $call = $client->calls()->get(self::CALL_ID);
+        $this->assertSame(VoiceAgentKind::SIP, $call['agentKind']);
+        $this->assertTrue($call['agentFallback']);
+        $this->assertSame('+15555550190', $call['transfer']['to']);
+        $this->assertSame(CallTransferStatus::FAILED, $call['transfer']['status']);
+        $this->assertSame(CallTransferFailureReason::NO_ANSWER, $call['transfer']['failureReason']);
+
+        $call = $client->calls()->get(self::CALL_ID);
+        $this->assertSame('hologram', $call['agentKind']);
+        $this->assertSame('parked', $call['transfer']['status']);
+        $this->assertNull($call['transfer']['failureReason']);
+
+        $call = $client->calls()->get(self::CALL_ID);
+        $this->assertNull($call['agentKind']);
+        $this->assertFalse($call['agentFallback']);
+        $this->assertNull($call['transfer']);
+    }
+
     public function testGetPercentEncodesTheId(): void
     {
         $client = $this->createMockClient([
@@ -625,6 +701,114 @@ class CallsTest extends TestCase
         $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('Call ID is required');
         $client->calls()->hangup('');
+    }
+
+    // ==================== transfer() ====================
+
+    public function testTransferPostsTheNumber(): void
+    {
+        $client = $this->createMockClient([
+            new Response(202, [], json_encode($this->call([
+                'direction' => 'inbound',
+                'status' => 'active',
+                'agentKind' => 'websocket',
+                'transfer' => ['to' => '+15555550190', 'status' => 'pending', 'failureReason' => null],
+            ]))),
+        ]);
+
+        $result = $client->calls()->transfer(self::CALL_ID, '+15555550190');
+
+        $this->assertSame('POST', $this->lastRequest()->getMethod());
+        $this->assertSame('/api/v1/calls/' . self::CALL_ID . '/transfer', $this->lastRequest()->getUri()->getPath());
+        $this->assertSame(['to' => '+15555550190'], $this->sentBody());
+        $this->assertTrue($this->lastRequest()->hasHeader('Idempotency-Key'));
+        $this->assertSame(CallTransferStatus::PENDING, $result['transfer']['status']);
+        $this->assertSame('+15555550190', $result['transfer']['to']);
+        $this->assertSame('websocket', $result['agentKind']);
+    }
+
+    public function testTransferWithoutANumberSendsAnEmptyObject(): void
+    {
+        $client = $this->createMockClient([
+            new Response(202, [], json_encode($this->call([
+                'transfer' => ['to' => '+15555550190', 'status' => 'pending', 'failureReason' => null],
+            ]))),
+            new Response(202, [], json_encode($this->call())),
+        ]);
+
+        $client->calls()->transfer(self::CALL_ID);
+        $this->assertSame('{}', (string) $this->lastRequest()->getBody());
+
+        $client->calls()->transfer(self::CALL_ID, null, 'transfer-once');
+        $this->assertSame('{}', (string) $this->lastRequest()->getBody());
+        $this->assertSame('transfer-once', $this->lastRequest()->getHeaderLine('Idempotency-Key'));
+    }
+
+    public function testTransferPercentEncodesTheId(): void
+    {
+        $client = $this->createMockClient([
+            new Response(202, [], json_encode($this->call())),
+        ]);
+
+        $client->calls()->transfer('../hangup');
+
+        $this->assertSame('/api/v1/calls/..%2Fhangup/transfer', $this->lastRequest()->getUri()->getPath());
+    }
+
+    public function testTransferRequiresId(): void
+    {
+        $client = new Sendly('test_api_key');
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('Call ID is required');
+        $client->calls()->transfer('', '+15555550190');
+    }
+
+    public function testTransferWithoutATransferNumberMapsToValidationException(): void
+    {
+        $client = $this->createMockClient([
+            $this->apiError('POST', '/calls/x/transfer', 400, 'transfer_to_required', 'Pass to: this agent has no transfer number.'),
+        ]);
+
+        try {
+            $client->calls()->transfer(self::CALL_ID);
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertSame(CallErrorCode::TRANSFER_TO_REQUIRED, $e->getApiErrorCode());
+        }
+    }
+
+    public function testTransferWithoutCreditsMapsToTypedException(): void
+    {
+        $client = $this->createMockClient([
+            $this->apiError('POST', '/calls/x/transfer', 402, 'insufficient_credits', 'Transfers need credits on the workspace. Current balance: 0.', [
+                'creditsNeeded' => 1,
+                'currentBalance' => 0,
+            ]),
+        ]);
+
+        try {
+            $client->calls()->transfer(self::CALL_ID);
+            $this->fail('Expected InsufficientCreditsException');
+        } catch (InsufficientCreditsException $e) {
+            $this->assertSame(CallErrorCode::INSUFFICIENT_CREDITS, $e->getApiErrorCode());
+        }
+    }
+
+    public function testTransferInProgressSurfacesStatusAndCode(): void
+    {
+        $client = $this->createMockClient([
+            $this->apiError('POST', '/calls/x/transfer', 409, 'transfer_in_progress', 'A transfer is already under way.'),
+        ]);
+
+        try {
+            $client->calls()->transfer(self::CALL_ID, '+15555550190');
+            $this->fail('Expected SendlyException');
+        } catch (SendlyException $e) {
+            $this->assertSame(409, $e->getCode());
+            $this->assertSame(CallErrorCode::TRANSFER_IN_PROGRESS, $e->getApiErrorCode());
+        }
+
+        $this->assertCount(1, $this->history);
     }
 
     // ==================== recording() ====================

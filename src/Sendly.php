@@ -446,7 +446,7 @@ class Sendly
      */
     public function post(string $path, array $body = [], ?string $idempotencyKey = null, bool $autoIdempotencyKey = true): array
     {
-        return $this->request('POST', $path, ['json' => $body], $idempotencyKey, $autoIdempotencyKey);
+        return $this->request('POST', $path, ['json' => $body === [] ? new \stdClass() : $body], $idempotencyKey, $autoIdempotencyKey);
     }
 
     /**

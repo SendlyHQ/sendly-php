@@ -1031,6 +1031,11 @@ if ($result['pagination']['hasMore']) {
 // has already ended is returned unchanged.
 $client->calls()->hangup($call['id']);
 
+// Hand the caller on an incoming call to a person. Left out, `to` is the
+// agent's transfer number (tools.transferTo).
+$call = $client->calls()->transfer($call['id'], '+15125550199');
+echo $call['transfer']['status']; // "pending", then "completed" or "failed"
+
 // Fetch the recording. The URL is signed and valid for five minutes.
 // Agent-handled calls are stereo: the agent on the left channel, the other party on the right.
 $recording = $client->calls()->recording($call['id']);
@@ -1042,14 +1047,16 @@ if ($recording['status'] === CallRecordingStatus::READY) {
 | Method | Endpoint | Scope | Description |
 | --- | --- | --- | --- |
 | `calls()->create($params, $idempotencyKey = null)` | `POST /calls` | `calls:write` | Place a call handled by an AI agent. `to` and `agentId` required; `from`, `context`, `metadata` optional. |
-| `calls()->list($options = [])` | `GET /calls` | `calls:read` | List calls. `limit`, `offset`, `status`, `direction`, `kind`, `agentId`, `to`, `from`. Returns `data` and `pagination` (`total`, `limit`, `offset`, `hasMore`). |
+| `calls()->list($options = [])` | `GET /calls` | `calls:read` | List calls. `limit`, `offset`, `status`, `direction`, `kind`, `agentId`, `agentKind`, `to`, `from`. Returns `data` and `pagination` (`total`, `limit`, `offset`, `hasMore`). |
 | `calls()->get($id)` | `GET /calls/{id}` | `calls:read` | One call, plus `transcript` on agent-handled calls. |
 | `calls()->hangup($id, $idempotencyKey = null)` | `POST /calls/{id}/hangup` | `calls:write` | End a ringing or active call. |
+| `calls()->transfer($id, $to = null, $idempotencyKey = null)` | `POST /calls/{id}/transfer` | `calls:write` | Transfer the caller on an incoming phone call. Returns the call (202) with `transfer.status` `pending`. |
 | `calls()->recording($id)` | `GET /calls/{id}/recording` | `calls:read` | `status` (`none`, `recording`, `ready`, `failed`), `url` and `expiresAt` (set when `ready`), `contentType` (`audio/ogg`). |
 
 `CallStatus`, `CallDirection`, `CallKind`, `CallChannel`, `CallHandledBy`,
-`CallBilling`, `CallRecordingStatus` and `CallErrorCode` in `Sendly\Resources`
-hold the string values the endpoints use. A call's `channel` says how the other
+`CallBilling`, `CallRecordingStatus`, `CallTransferStatus`,
+`CallTransferFailureReason`, `VoiceAgentKind` and `CallErrorCode` in
+`Sendly\Resources` hold the string values the endpoints use. A call's `channel` says how the other
 party reached it: `phone`, `whatsapp` or `browser` (more may be added). Calls
 placed through the API are phone calls. A call's `billing` is `metered` while a phone call is
 charged per minute, `settled` once it has ended, and `unbilled` for calls that
@@ -1058,7 +1065,23 @@ were never charged (browser-to-browser calls between teammates are free).
 `callee_hung_up` and `agent_agent_hangup` are ordinary endings; `ring_timeout`,
 `callee_busy`, `callee_declined` and `caller_cancelled` mean it never
 connected; `max_duration` (60 minutes) and `credits_exhausted` mean the
-platform cut it short.
+platform cut it short; `transferred` means the caller was handed over;
+`agent_remote_hangup` means your own agent ended the call, and
+`agent_byo_failed` that it could not be reached.
+
+A call's `agentKind` is the kind of agent that answered (`sendly`,
+`custom_llm`, `sip` or `websocket`; null when no agent did). `agentFallback`
+is true when your own agent could not be reached, so Sendly said a short line
+and transferred the caller or took a message. `transfer` is null until the
+call is transferred, then `to`, `status` (`pending`, `completed` or `failed`)
+and `failureReason` (`busy`, `no_answer`, `declined`, `unavailable` or
+`unknown`, set only when it failed; the caller stays on the call). A transfer
+to a number other than the agent's transfer number needs calling out switched
+on for the workspace (403 `outbound_not_enabled` otherwise); other refusals
+are 400 `transfer_to_required`, 402 `insufficient_credits` and 409
+`call_not_active`, `call_not_transferable` or `transfer_in_progress`. An agent
+whose `kind` is `sip` or `websocket` answers incoming calls only, so
+`calls()->create()` with it is 409 `agent_kind_unsupported`.
 
 The `call.started`, `call.completed` and `call.recording.ready` webhooks carry
 the call at `$event->object` in snake_case (`channel`, `handled_by`,
@@ -1078,6 +1101,7 @@ agent holds its own scoped sending key); otherwise the API responds
 
 ```php
 use Sendly\Resources\VoiceMode;
+use Sendly\Resources\VoiceAgentKind;
 use Sendly\Resources\CallErrorCode;
 use Sendly\Exceptions\SendlyException;
 use Sendly\Exceptions\ValidationException;
@@ -1100,6 +1124,27 @@ var_dump($agent['canSendSms']);             // true
 // Change only what you pass; tools keys you leave out keep their values
 $client->voice->agents->update($agent['id'], [
     'greeting' => 'Thanks for calling Acme. How can I help today?',
+]);
+
+// Or answer with your own agent (needs the workspace's bring-your-own-agent
+// feature): your chat completions endpoint (custom_llm), a SIP address (sip)
+// or a wss:// server (websocket). Secrets are never returned.
+$own = $client->voice->agents->create([
+    'name' => 'Own model',
+    'kind' => VoiceAgentKind::CUSTOM_LLM,
+    'connection' => [
+        'baseUrl' => 'https://llm.example.com/v1',
+        'model' => 'acme-receptionist-1',
+        'apiKey' => 'sk-example',
+    ],
+]);
+$secret = $own['signingSecret']; // shown once: save it to check X-Sendly-Signature
+
+// Fields left out of `connection` keep their values; null removes a secret.
+// rotateSigningSecret returns a new secret once and retires the old one.
+$own = $client->voice->agents->update($own['id'], [
+    'connection' => ['apiKey' => null],
+    'rotateSigningSecret' => true,
 ]);
 
 // Register the emergency address: required before a US or Canadian number
@@ -1154,9 +1199,9 @@ try {
 | `voice->numbers->update($number, $params)` | `PATCH /voice/numbers/{number}` | `calls:write` | `voiceEnabled`, `voiceMode` (`none`, `ring_dashboard`, `agent`), `agentId` (`null` clears it). |
 | `voice->numbers->registerEmergencyAddress($number, $params, $idempotencyKey = null)` | `POST /voice/numbers/{number}/emergency-address` | `calls:write` | `street`, `city`, `state`, `zip` required; `unit` and `country` (`US`, the default, or `CA`) optional. |
 | `voice->agents->list()` | `GET /voice/agents` | `calls:read` | Agents under `data`, with `callsHandled` and `avgDurationSecs`. |
-| `voice->agents->create($params, $idempotencyKey = null)` | `POST /voice/agents` | `calls:write` | `name` required; `enabled`, `voice`, `language`, `greeting`, `instructions`, `tools` (`sendSms`, `transferTo`) optional. |
-| `voice->agents->get($id)` | `GET /voice/agents/{id}` | `calls:read` | One agent. |
-| `voice->agents->update($id, $params)` | `PATCH /voice/agents/{id}` | `calls:write` | Any subset of the create fields. |
+| `voice->agents->create($params, $idempotencyKey = null)` | `POST /voice/agents` | `calls:write` | `name` required; `enabled`, `kind`, `connection`, `voice`, `language`, `greeting`, `instructions`, `tools` (`sendSms`, `transferTo`) optional. Your own agent comes back with `signingSecret`, shown once. |
+| `voice->agents->get($id)` | `GET /voice/agents/{id}` | `calls:read` | One agent, with `kind`, `connection` and `hasSigningSecret`. |
+| `voice->agents->update($id, $params)` | `PATCH /voice/agents/{id}` | `calls:write` | Any subset of the create fields, and `rotateSigningSecret` (sent only when `true`). |
 | `voice->agents->delete($id)` | `DELETE /voice/agents/{id}` | `calls:write` | Delete an agent and revoke its sending key. Returns `id`, `object` and `deleted`. |
 | `voice->voices->list()` | `GET /voice/voices` | `calls:read` | Voices (`id`, `label`, `language`) under `data`. |
 
@@ -1166,11 +1211,19 @@ on (and can be refused like any switch-on) and `none` switches it off. When
 `voiceEnabled` is sent too it wins: `false` switches voice off, and `true` with
 `none` rings the dashboard. A
 workspace can have up to 20 agents, and an unknown voice id falls back to the
-default voice. Agents can't transfer calls yet: with `tools.transferTo` set, a
-caller who asks for a person is told the message will be passed on and the
-agent takes their name and number.
+default voice. `tools.transferTo` is the number a caller who asks for a
+person is transferred to, and where `calls()->transfer()` sends the caller
+when you leave out `to`.
+
+An agent's `connection` is null for a `sendly` agent; for your own agents it
+reports `baseUrl`, `model`, `headerNames` and `hasApiKey` (`custom_llm`),
+`uri`, `transport`, `mediaEncryption`, `username`, `hasPassword` and `headers`
+(`sip`), or `url`, `audioFormat`, `hasAuthToken` and `customParameters`
+(`websocket`). Switching `kind` to `sendly` removes the connection and the
+signing secret.
 
 Refusals: `number_not_found` and `agent_not_found` (404, `NotFoundException`);
+`byo_agents_not_enabled` (403, your own agent while the feature is off);
 `invalid_request`, `invalid_voice_mode`, `agent_required`, `invalid_address`
 and `e911_not_applicable` (400, `ValidationException`); `invalid_address`
 (422, `ValidationException`, with a corrected address or null under

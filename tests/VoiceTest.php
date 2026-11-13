@@ -16,6 +16,7 @@ use Psr\Http\Message\RequestInterface;
 use Sendly\Sendly;
 use Sendly\Resources\CallErrorCode;
 use Sendly\Resources\Voice;
+use Sendly\Resources\VoiceAgentKind;
 use Sendly\Resources\VoiceAgents;
 use Sendly\Resources\VoiceMode;
 use Sendly\Resources\VoiceNumbers;
@@ -111,6 +112,9 @@ class VoiceTest extends TestCase
             'object' => 'voice_agent',
             'name' => 'Front desk',
             'enabled' => true,
+            'kind' => 'sendly',
+            'connection' => null,
+            'hasSigningSecret' => false,
             'voice' => 'ashley',
             'voiceLabel' => 'Ashley (US, warm)',
             'language' => 'en-US',
@@ -680,6 +684,204 @@ class VoiceTest extends TestCase
 
         $this->assertSame('PATCH', $this->lastRequest()->getMethod());
         $this->assertSame('{}', (string) $this->lastRequest()->getBody());
+    }
+
+    public function testAgentKindConstantsMatchTheWire(): void
+    {
+        $this->assertSame('sendly', VoiceAgentKind::SENDLY);
+        $this->assertSame('custom_llm', VoiceAgentKind::CUSTOM_LLM);
+        $this->assertSame('sip', VoiceAgentKind::SIP);
+        $this->assertSame('websocket', VoiceAgentKind::WEBSOCKET);
+        $this->assertSame('byo_agents_not_enabled', CallErrorCode::BYO_AGENTS_NOT_ENABLED);
+    }
+
+    public function testAgentsGetReportsASendlyAgentWithoutConnection(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode($this->agent())),
+        ]);
+
+        $result = $client->voice->agents->get(self::AGENT_ID);
+
+        $this->assertSame(VoiceAgentKind::SENDLY, $result['kind']);
+        $this->assertNull($result['connection']);
+        $this->assertFalse($result['hasSigningSecret']);
+        $this->assertArrayNotHasKey('signingSecret', $result);
+    }
+
+    public function testAgentsCreateSendsKindAndConnectionAsGiven(): void
+    {
+        $connection = [
+            'baseUrl' => 'https://llm.example.com/v1',
+            'model' => 'acme-receptionist-1',
+            'apiKey' => 'sk-example-123',
+            'headers' => ['X-Team' => 'front-desk'],
+        ];
+        $client = $this->createMockClient([
+            new Response(201, [], json_encode($this->agent([
+                'kind' => 'custom_llm',
+                'connection' => [
+                    'baseUrl' => 'https://llm.example.com/v1',
+                    'model' => 'acme-receptionist-1',
+                    'headerNames' => ['X-Team'],
+                    'hasApiKey' => true,
+                ],
+                'hasSigningSecret' => true,
+                'signingSecret' => 'vsk_agent_once',
+            ]))),
+        ]);
+
+        $result = $client->voice->agents->create([
+            'name' => 'Front desk',
+            'kind' => VoiceAgentKind::CUSTOM_LLM,
+            'connection' => $connection,
+            'rotateSigningSecret' => true,
+        ]);
+
+        $this->assertSame('POST', $this->lastRequest()->getMethod());
+        $this->assertSame('/api/v1/voice/agents', $this->lastRequest()->getUri()->getPath());
+        $this->assertSame([
+            'name' => 'Front desk',
+            'kind' => 'custom_llm',
+            'connection' => $connection,
+        ], $this->sentBody());
+        $this->assertSame('custom_llm', $result['kind']);
+        $this->assertSame(['X-Team'], $result['connection']['headerNames']);
+        $this->assertTrue($result['connection']['hasApiKey']);
+        $this->assertArrayNotHasKey('apiKey', $result['connection']);
+        $this->assertTrue($result['hasSigningSecret']);
+        $this->assertSame('vsk_agent_once', $result['signingSecret']);
+    }
+
+    public function testAgentsCreateWithoutConnectionSendsNone(): void
+    {
+        $client = $this->createMockClient([
+            new Response(201, [], json_encode($this->agent())),
+            new Response(201, [], json_encode($this->agent())),
+        ]);
+
+        $client->voice->agents->create(['name' => 'Front desk', 'kind' => null, 'connection' => null]);
+        $this->assertSame(['name' => 'Front desk'], $this->sentBody());
+
+        $client->voice->agents->create(['name' => 'Front desk', 'connection' => []]);
+        $this->assertSame(['name' => 'Front desk'], $this->sentBody());
+    }
+
+    public function testAgentsUpdateKeepsOmittedSecretsAndSendsNullToRemoveThem(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode($this->agent([
+                'kind' => 'sip',
+                'connection' => [
+                    'uri' => 'sip:+15555550100@sip.example.com',
+                    'transport' => 'tls',
+                    'mediaEncryption' => 'require',
+                    'username' => 'frontdesk',
+                    'hasPassword' => false,
+                    'headers' => [],
+                ],
+                'hasSigningSecret' => true,
+            ]))),
+        ]);
+
+        $result = $client->voice->agents->update(self::AGENT_ID, [
+            'connection' => [
+                'transport' => 'tls',
+                'mediaEncryption' => 'require',
+                'password' => null,
+                'headers' => [],
+            ],
+        ]);
+
+        $this->assertSame('PATCH', $this->lastRequest()->getMethod());
+        $this->assertSame(
+            '{"connection":{"transport":"tls","mediaEncryption":"require","password":null,"headers":{}}}',
+            (string) $this->lastRequest()->getBody()
+        );
+        $this->assertArrayNotHasKey('username', $this->sentBody()['connection']);
+        $this->assertSame('sip', $result['kind']);
+        $this->assertFalse($result['connection']['hasPassword']);
+        $this->assertSame('frontdesk', $result['connection']['username']);
+        $this->assertArrayNotHasKey('signingSecret', $result);
+    }
+
+    public function testAgentsUpdateSwitchesKindAndReturnsTheSigningSecretOnce(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode($this->agent([
+                'kind' => 'websocket',
+                'connection' => [
+                    'url' => 'wss://agent.example.com/calls',
+                    'audioFormat' => 'pcm16_24000',
+                    'hasAuthToken' => true,
+                    'customParameters' => ['tenant' => 'acme'],
+                ],
+                'hasSigningSecret' => true,
+                'signingSecret' => 'vsk_switched',
+            ]))),
+        ]);
+
+        $result = $client->voice->agents->update(self::AGENT_ID, [
+            'kind' => VoiceAgentKind::WEBSOCKET,
+            'connection' => [
+                'url' => 'wss://agent.example.com/calls',
+                'audioFormat' => 'pcm16_24000',
+                'authToken' => 'token-123',
+                'customParameters' => ['tenant' => 'acme'],
+            ],
+        ]);
+
+        $this->assertSame([
+            'kind' => 'websocket',
+            'connection' => [
+                'url' => 'wss://agent.example.com/calls',
+                'audioFormat' => 'pcm16_24000',
+                'authToken' => 'token-123',
+                'customParameters' => ['tenant' => 'acme'],
+            ],
+        ], $this->sentBody());
+        $this->assertSame('pcm16_24000', $result['connection']['audioFormat']);
+        $this->assertTrue($result['connection']['hasAuthToken']);
+        $this->assertSame(['tenant' => 'acme'], $result['connection']['customParameters']);
+        $this->assertSame('vsk_switched', $result['signingSecret']);
+    }
+
+    public function testAgentsUpdateSendsRotateSigningSecretOnlyAsTrue(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode($this->agent(['kind' => 'sip', 'hasSigningSecret' => true, 'signingSecret' => 'vsk_rotated']))),
+            new Response(200, [], json_encode($this->agent())),
+            new Response(200, [], json_encode($this->agent())),
+            new Response(200, [], json_encode($this->agent())),
+        ]);
+
+        $result = $client->voice->agents->update(self::AGENT_ID, ['rotateSigningSecret' => true]);
+        $this->assertSame('{"rotateSigningSecret":true}', (string) $this->lastRequest()->getBody());
+        $this->assertSame('vsk_rotated', $result['signingSecret']);
+
+        foreach ([false, 'true', 1] as $value) {
+            $client->voice->agents->update(self::AGENT_ID, ['rotateSigningSecret' => $value]);
+            $this->assertSame('{}', (string) $this->lastRequest()->getBody());
+        }
+    }
+
+    public function testAgentsCreateOwnAgentWhileFeatureIsOffSurfacesCode(): void
+    {
+        $client = $this->createMockClient([
+            $this->apiError('POST', '/voice/agents', 403, 'byo_agents_not_enabled', 'Bring your own agent is not switched on for this workspace.'),
+        ]);
+
+        try {
+            $client->voice->agents->create([
+                'name' => 'Front desk',
+                'kind' => VoiceAgentKind::SIP,
+                'connection' => ['uri' => 'sip:+15555550100@sip.example.com'],
+            ]);
+            $this->fail('Expected SendlyException');
+        } catch (SendlyException $e) {
+            $this->assertSame(403, $e->getCode());
+            $this->assertSame(CallErrorCode::BYO_AGENTS_NOT_ENABLED, $e->getApiErrorCode());
+        }
     }
 
     public function testAgentsDeleteReturnsConfirmation(): void

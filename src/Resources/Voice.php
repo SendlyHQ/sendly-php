@@ -195,7 +195,9 @@ class VoiceNumbers
  */
 class VoiceAgents
 {
-    private const AGENT_KEYS = ['name', 'enabled', 'voice', 'language', 'greeting', 'instructions'];
+    private const AGENT_KEYS = ['name', 'enabled', 'kind', 'voice', 'language', 'greeting', 'instructions'];
+
+    private const CONNECTION_MAP_KEYS = ['headers', 'customParameters'];
 
     private Sendly $client;
 
@@ -230,11 +232,37 @@ class VoiceAgents
      * characters) is what the agent says when it picks up, and
      * `instructions` (up to 4000) the business instructions it follows.
      * `tools.sendSms` (default true) lets the agent text the caller during
-     * the call. Agents cannot transfer calls yet: while `tools.transferTo`
-     * (an E.164 number, default null) is set, a caller who asks for a person
-     * is told the message will be passed on and the agent takes their name
-     * and number. Other keys are dropped; a field the API rejects is 400
-     * `invalid_request`, thrown as `ValidationException` naming the field.
+     * the call. `tools.transferTo` (an E.164 number, default null) is the
+     * number a caller who asks for a person is transferred to, and where
+     * {@see Calls::transfer()} sends the caller when you leave out `to`.
+     *
+     * `kind` is a {@see VoiceAgentKind}: `sendly` (the default), or one of
+     * your own agents, `custom_llm`, `sip` or `websocket`, which need
+     * `connection` and the workspace's bring-your-own-agent feature (403
+     * `byo_agents_not_enabled` otherwise; support switches it on).
+     * `connection` matches the kind and is sent as given:
+     * `custom_llm` takes `baseUrl` (an `https://` URL; Sendly POSTs
+     * `{baseUrl}/chat/completions` with streaming), `model`, `apiKey` (sent
+     * as `Authorization: Bearer`) and `headers` (up to 10, with secret
+     * values); `sip` takes `uri` (such as `sip:+15125550100@sip.example.com`),
+     * `transport` (`auto`, `udp`, `tcp` or `tls`; default `tcp`),
+     * `mediaEncryption` (`disable`, `allow` or `require`; default `allow`),
+     * `username`, `password` and `headers` (up to 10 named `X-...`);
+     * `websocket` takes `url` (a `wss://` URL), `audioFormat`
+     * (`pcm16_16000`, the default, `pcm16_24000`, `pcm16_8000` or
+     * `mulaw_8000`), `authToken` (sent as `Authorization: Bearer`) and
+     * `customParameters` (up to 20 values sent in the `start` message).
+     * Hosts must resolve to public internet addresses. Secrets are never
+     * returned: the agent's `connection` reports `hasApiKey`, `headerNames`,
+     * `hasPassword` or `hasAuthToken` instead.
+     *
+     * Your own agent comes back with `signingSecret`, shown this once: save
+     * it now, it is never shown again. Sendly signs every request to your
+     * agent with it in `X-Sendly-Signature` (`t=<unix>,v1=<hex HMAC-SHA256>`).
+     *
+     * Other keys are dropped; a field the API rejects is 400
+     * `invalid_request`, thrown as `ValidationException` naming the field
+     * (`connection.<field>: <reason>` for a connection rule).
      *
      * Requires a live API key with the `calls:write` scope. In a team
      * workspace the key's role must be able to manage API keys. The POST
@@ -244,7 +272,8 @@ class VoiceAgents
      * @param CreateVoiceAgentRequest $params `name` is required.
      * @param string|null $idempotencyKey Idempotency key (1-255 printable
      *   ASCII characters). Overrides the auto-generated per-request key.
-     * @return VoiceAgent The new agent.
+     * @return VoiceAgent The new agent, with `signingSecret` when it is one
+     *   of your own.
      * @throws ValidationException If `name` is empty.
      */
     public function create(array $params, ?string $idempotencyKey = null): array
@@ -281,17 +310,35 @@ class VoiceAgents
      * and an empty `language` resets it to `en-US`. Changes apply to the next
      * call the agent takes.
      *
+     * With the same `kind`, `connection` is merged into the saved one: keys
+     * you leave out keep their values, a secret (`apiKey`, `password`,
+     * `authToken`) set to null is removed, and `headers` or
+     * `customParameters` replace the saved set (null removes them).
+     * Switching to one of your own kinds needs a full `connection` and
+     * returns a new `signingSecret`; switching to `sendly` removes the
+     * connection and the signing secret. `rotateSigningSecret` set to true
+     * makes a new signing secret, returned once in `signingSecret`, and the
+     * old one stops working at once; it is refused (400 `invalid_request`)
+     * on a `sendly` agent, and any other value is not sent.
+     *
      * Requires a live API key with the `calls:write` scope. In a team
      * workspace the key's role must be able to manage API keys.
      *
      * @param string $id Agent ID
-     * @param UpdateVoiceAgentRequest $params Any subset of the create fields
-     * @return VoiceAgent The agent after the change.
+     * @param UpdateVoiceAgentRequest $params Any subset of the create fields,
+     *   and `rotateSigningSecret`
+     * @return VoiceAgent The agent after the change, with `signingSecret`
+     *   when one was just made: save it now, it is never shown again.
      * @throws ValidationException If ID is empty.
      */
     public function update(string $id, array $params): array
     {
-        return $this->client->patch(self::path($id), self::body($params));
+        $body = self::body($params);
+        if (($params['rotateSigningSecret'] ?? null) === true) {
+            $body['rotateSigningSecret'] = true;
+        }
+
+        return $this->client->patch(self::path($id), $body);
     }
 
     /**
@@ -358,6 +405,16 @@ class VoiceAgents
             }
         }
 
+        if (is_array($params['connection'] ?? null) && $params['connection'] !== []) {
+            $connection = $params['connection'];
+            foreach (self::CONNECTION_MAP_KEYS as $key) {
+                if (($connection[$key] ?? null) === []) {
+                    $connection[$key] = new \stdClass();
+                }
+            }
+            $body['connection'] = $connection;
+        }
+
         return $body;
     }
 }
@@ -408,6 +465,11 @@ class VoiceVoices
  * method throws `NotFoundException` (`voice_not_enabled`). Error codes are
  * in {@see CallErrorCode}.
  *
+ * An agent is Sendly's own (`kind` `sendly`) or one of yours that Sendly
+ * reaches over a `connection` (`custom_llm`, `sip` or `websocket`; see
+ * {@see VoiceAgentKind}), behind the workspace's bring-your-own-agent
+ * feature.
+ *
  * @phpstan-type EmergencyAddress array{street: string, unit?: string, city: string, state: string, zip: string, country: string}
  * @phpstan-type VoiceNumberEmergencyAddress array{status: string, address: ?EmergencyAddress}
  * @phpstan-type VoiceNumberRates array{inbound: int, outbound: int, agent: int}
@@ -415,9 +477,15 @@ class VoiceVoices
  * @phpstan-type UpdateVoiceNumberRequest array{voiceEnabled?: bool, voiceMode?: string, agentId?: ?string}
  * @phpstan-type RegisterEmergencyAddressRequest array{street: string, unit?: string, city: string, state: string, zip: string, country?: string}
  * @phpstan-type VoiceAgentTools array{sendSms: bool, transferTo: ?string}
- * @phpstan-type VoiceAgent array{id: string, object: string, name: string, enabled: bool, voice: string, voiceLabel: string, language: string, greeting: string, instructions: string, tools: VoiceAgentTools, canSendSms: bool, callsHandled: int, avgDurationSecs: int, createdAt: string, updatedAt: string}
- * @phpstan-type CreateVoiceAgentRequest array{name: string, enabled?: bool, voice?: string, language?: string, greeting?: string, instructions?: string, tools?: array{sendSms?: bool, transferTo?: ?string}}
- * @phpstan-type UpdateVoiceAgentRequest array{name?: string, enabled?: bool, voice?: string, language?: string, greeting?: string, instructions?: string, tools?: array{sendSms?: bool, transferTo?: ?string}}
+ * @phpstan-type VoiceAgentCustomLlmConnection array{baseUrl: string, model: string, headerNames: array<int, string>, hasApiKey: bool}
+ * @phpstan-type VoiceAgentSipConnection array{uri: string, transport: string, mediaEncryption: string, username: ?string, hasPassword: bool, headers: array<string, string>}
+ * @phpstan-type VoiceAgentWebsocketConnection array{url: string, audioFormat: string, hasAuthToken: bool, customParameters: array<string, string>}
+ * @phpstan-type VoiceAgent array{id: string, object: string, name: string, enabled: bool, kind: string, connection: VoiceAgentCustomLlmConnection|VoiceAgentSipConnection|VoiceAgentWebsocketConnection|null, hasSigningSecret: bool, signingSecret?: string, voice: string, voiceLabel: string, language: string, greeting: string, instructions: string, tools: VoiceAgentTools, canSendSms: bool, callsHandled: int, avgDurationSecs: int, createdAt: string, updatedAt: string}
+ * @phpstan-type VoiceAgentCustomLlmConnectionInput array{baseUrl?: string, model?: string, apiKey?: ?string, headers?: ?array<string, string>}
+ * @phpstan-type VoiceAgentSipConnectionInput array{uri?: string, transport?: string, mediaEncryption?: string, username?: ?string, password?: ?string, headers?: ?array<string, string>}
+ * @phpstan-type VoiceAgentWebsocketConnectionInput array{url?: string, audioFormat?: string, authToken?: ?string, customParameters?: ?array<string, string>}
+ * @phpstan-type CreateVoiceAgentRequest array{name: string, enabled?: bool, kind?: string, connection?: VoiceAgentCustomLlmConnectionInput|VoiceAgentSipConnectionInput|VoiceAgentWebsocketConnectionInput, voice?: string, language?: string, greeting?: string, instructions?: string, tools?: array{sendSms?: bool, transferTo?: ?string}}
+ * @phpstan-type UpdateVoiceAgentRequest array{name?: string, enabled?: bool, kind?: string, connection?: VoiceAgentCustomLlmConnectionInput|VoiceAgentSipConnectionInput|VoiceAgentWebsocketConnectionInput, rotateSigningSecret?: true, voice?: string, language?: string, greeting?: string, instructions?: string, tools?: array{sendSms?: bool, transferTo?: ?string}}
  * @phpstan-type DeletedVoiceAgent array{id: string, object: string, deleted: bool}
  * @phpstan-type AgentVoice array{id: string, label: string, language: string}
  *
