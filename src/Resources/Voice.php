@@ -191,6 +191,8 @@ class VoiceNumbers
  * @phpstan-import-type VoiceAgent from Voice
  * @phpstan-import-type CreateVoiceAgentRequest from Voice
  * @phpstan-import-type UpdateVoiceAgentRequest from Voice
+ * @phpstan-import-type TestVoiceAgentRequest from Voice
+ * @phpstan-import-type VoiceAgentTest from Voice
  * @phpstan-import-type DeletedVoiceAgent from Voice
  */
 class VoiceAgents
@@ -342,6 +344,63 @@ class VoiceAgents
     }
 
     /**
+     * Test your own agent's connection the way a call would reach it,
+     * without placing one.
+     *
+     * `custom_llm` gets a signed, streamed chat completion with a test
+     * message. `websocket` gets a signed connection with `connected`, a
+     * `start` carrying `test: true`, half a second of silence and a `stop`
+     * with reason `test_finished`. `sip` gets an `OPTIONS` request, answered
+     * with the saved credentials if the server asks; a SIP server answering
+     * shows the address and credentials work, not which agent picks up.
+     *
+     * Leave `$params` out to test the saved connection. `kind` is the kind
+     * of the settings in `connection` (`custom_llm`, `sip` or `websocket`;
+     * see {@see VoiceAgentKind}) and defaults to the agent's own; it is
+     * needed to test settings of another kind, such as on a `sendly` agent
+     * before switching it. `connection` is tested instead of the saved
+     * settings, in the same shape as on create, and nothing is saved; for
+     * the agent's own kind, a secret left out is taken from the saved
+     * connection, while the host stays the same. `instructions` (up to 4000 characters) is the system
+     * prompt sent to a `custom_llm` agent and defaults to the agent's
+     * instructions. Other keys are dropped.
+     *
+     * A failed test is still a successful request: check `ok`, then
+     * `outcome` (see {@see VoiceAgentTestOutcome}) and `message`. A
+     * workspace can run 10 tests a minute (429 after that). The request
+     * carries no `Idempotency-Key`.
+     *
+     * Requires a live API key with the `calls:write` scope. A `sendly`
+     * agent tested without `kind`, or a `connection` that breaks a rule, is
+     * 400 `invalid_request`; a workspace without the bring-your-own-agent
+     * feature gets 403 `byo_agents_not_enabled`, and an agent that is not
+     * in the workspace 404 `agent_not_found`.
+     *
+     * @param string $id Agent ID
+     * @param TestVoiceAgentRequest $params Settings to test instead of the
+     *   saved ones
+     * @return VoiceAgentTest What the test found; check `ok`.
+     * @throws ValidationException If ID is empty.
+     */
+    public function test(string $id, array $params = []): array
+    {
+        $path = self::path($id) . '/test';
+        $body = [];
+        if (isset($params['kind'])) {
+            $body['kind'] = $params['kind'];
+        }
+        $connection = self::body(['connection' => $params['connection'] ?? null]);
+        if (isset($connection['connection'])) {
+            $body['connection'] = $connection['connection'];
+        }
+        if (isset($params['instructions'])) {
+            $body['instructions'] = $params['instructions'];
+        }
+
+        return $this->client->post($path, $body, null, false);
+    }
+
+    /**
      * Delete an agent and revoke its sending key.
      *
      * An agent that still answers a number cannot be deleted: the API
@@ -486,6 +545,9 @@ class VoiceVoices
  * @phpstan-type VoiceAgentWebsocketConnectionInput array{url?: string, audioFormat?: string, authToken?: ?string, customParameters?: ?array<string, string>}
  * @phpstan-type CreateVoiceAgentRequest array{name: string, enabled?: bool, kind?: string, connection?: VoiceAgentCustomLlmConnectionInput|VoiceAgentSipConnectionInput|VoiceAgentWebsocketConnectionInput, voice?: string, language?: string, greeting?: string, instructions?: string, tools?: array{sendSms?: bool, transferTo?: ?string}}
  * @phpstan-type UpdateVoiceAgentRequest array{name?: string, enabled?: bool, kind?: string, connection?: VoiceAgentCustomLlmConnectionInput|VoiceAgentSipConnectionInput|VoiceAgentWebsocketConnectionInput, rotateSigningSecret?: true, voice?: string, language?: string, greeting?: string, instructions?: string, tools?: array{sendSms?: bool, transferTo?: ?string}}
+ * @phpstan-type TestVoiceAgentRequest array{kind?: string, connection?: VoiceAgentCustomLlmConnectionInput|VoiceAgentSipConnectionInput|VoiceAgentWebsocketConnectionInput, instructions?: string}
+ * @phpstan-type VoiceAgentTestStep array{step: string, ok: bool, detail: string}
+ * @phpstan-type VoiceAgentTest array{ok: bool, outcome: string, message: string, status: ?int, latencyMs: ?int, signed: bool, steps: array<int, VoiceAgentTestStep>}
  * @phpstan-type DeletedVoiceAgent array{id: string, object: string, deleted: bool}
  * @phpstan-type AgentVoice array{id: string, label: string, language: string}
  *

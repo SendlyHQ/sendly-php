@@ -1147,6 +1147,22 @@ $own = $client->voice->agents->update($own['id'], [
     'rotateSigningSecret' => true,
 ]);
 
+// Test the connection the way a call would reach it, without placing one.
+// A failed test is still a 200: check `ok`.
+$check = $client->voice->agents->test($own['id']);
+if (!$check['ok']) {
+    echo "{$check['outcome']}: {$check['message']}\n";
+    foreach ($check['steps'] as $step) {
+        echo ($step['ok'] ? 'ok   ' : 'fail ') . "{$step['step']} {$step['detail']}\n";
+    }
+}
+
+// Try settings before saving them; nothing is saved
+$client->voice->agents->test($own['id'], [
+    'kind' => VoiceAgentKind::SIP,
+    'connection' => ['uri' => 'sip:+15125550100@sip.example.com', 'transport' => 'tls'],
+]);
+
 // Register the emergency address: required before a US or Canadian number
 // can place calls, and $1.50 a month
 try {
@@ -1202,6 +1218,7 @@ try {
 | `voice->agents->create($params, $idempotencyKey = null)` | `POST /voice/agents` | `calls:write` | `name` required; `enabled`, `kind`, `connection`, `voice`, `language`, `greeting`, `instructions`, `tools` (`sendSms`, `transferTo`) optional. Your own agent comes back with `signingSecret`, shown once. |
 | `voice->agents->get($id)` | `GET /voice/agents/{id}` | `calls:read` | One agent, with `kind`, `connection` and `hasSigningSecret`. |
 | `voice->agents->update($id, $params)` | `PATCH /voice/agents/{id}` | `calls:write` | Any subset of the create fields, and `rotateSigningSecret` (sent only when `true`). |
+| `voice->agents->test($id, $params = [])` | `POST /voice/agents/{id}/test` | `calls:write` | Test your own agent's connection without placing a call. `kind`, `connection` and `instructions` optional, to test settings before saving them. Returns `ok`, `outcome` (a `VoiceAgentTestOutcome`; more may be added), `message`, `status`, `latencyMs`, `signed` and `steps`. 10 a minute; no idempotency key. |
 | `voice->agents->delete($id)` | `DELETE /voice/agents/{id}` | `calls:write` | Delete an agent and revoke its sending key. Returns `id`, `object` and `deleted`. |
 | `voice->voices->list()` | `GET /voice/voices` | `calls:read` | Voices (`id`, `label`, `language`) under `data`. |
 

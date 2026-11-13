@@ -18,6 +18,8 @@ use Sendly\Resources\CallErrorCode;
 use Sendly\Resources\Voice;
 use Sendly\Resources\VoiceAgentKind;
 use Sendly\Resources\VoiceAgents;
+use Sendly\Resources\VoiceAgentTestOutcome;
+use Sendly\Resources\VoiceAgentTestStepName;
 use Sendly\Resources\VoiceMode;
 use Sendly\Resources\VoiceNumbers;
 use Sendly\Resources\VoiceVoices;
@@ -884,6 +886,116 @@ class VoiceTest extends TestCase
         }
     }
 
+    private function agentTest(array $overrides = []): array
+    {
+        return array_merge([
+            'ok' => true,
+            'outcome' => 'ok',
+            'message' => "Your agent's server answered in 84 ms.",
+            'status' => 200,
+            'latencyMs' => 84,
+            'signed' => false,
+            'steps' => [
+                ['step' => 'address', 'ok' => true, 'detail' => 'sip.example.com points to a public server.'],
+                ['step' => 'connect', 'ok' => true, 'detail' => 'Connected over TLS to sip.example.com:5061 in 41 ms.'],
+                ['step' => 'reply', 'ok' => true, 'detail' => 'SIP 200 OK'],
+            ],
+        ], $overrides);
+    }
+
+    public function testAgentsTestWithNoArgsPostsAnEmptyObjectWithoutIdempotencyKey(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode($this->agentTest())),
+        ]);
+
+        $result = $client->voice->agents->test(self::AGENT_ID);
+
+        $this->assertSame('POST', $this->lastRequest()->getMethod());
+        $this->assertSame('/api/v1/voice/agents/' . self::AGENT_ID . '/test', $this->lastRequest()->getUri()->getPath());
+        $this->assertSame('{}', (string) $this->lastRequest()->getBody());
+        $this->assertFalse($this->lastRequest()->hasHeader('Idempotency-Key'));
+        $this->assertTrue($result['ok']);
+        $this->assertSame(VoiceAgentTestOutcome::OK, $result['outcome']);
+        $this->assertSame("Your agent's server answered in 84 ms.", $result['message']);
+        $this->assertSame(200, $result['status']);
+        $this->assertSame(84, $result['latencyMs']);
+        $this->assertFalse($result['signed']);
+        $this->assertCount(3, $result['steps']);
+        $this->assertSame(VoiceAgentTestStepName::ADDRESS, $result['steps'][0]['step']);
+        $this->assertSame('SIP 200 OK', $result['steps'][2]['detail']);
+    }
+
+    public function testAgentsTestSendsKindConnectionAndInstructions(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode($this->agentTest())),
+        ]);
+
+        $client->voice->agents->test(self::AGENT_ID, [
+            'kind' => VoiceAgentKind::SIP,
+            'connection' => ['uri' => 'sip:+15125550100@sip.example.com', 'transport' => 'tls', 'headers' => []],
+            'instructions' => 'Answer questions about opening hours.',
+            'name' => 'dropped',
+        ]);
+
+        $this->assertFalse($this->lastRequest()->hasHeader('Idempotency-Key'));
+        $this->assertSame(
+            '{"kind":"sip","connection":{"uri":"sip:+15125550100@sip.example.com","transport":"tls","headers":{}},"instructions":"Answer questions about opening hours."}',
+            (string) $this->lastRequest()->getBody()
+        );
+    }
+
+    public function testAgentsTestFailedResultKeepsUnknownOutcomeAndStep(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode($this->agentTest([
+                'ok' => false,
+                'outcome' => 'proxy_refused',
+                'message' => 'Something new happened.',
+                'status' => null,
+                'latencyMs' => null,
+                'signed' => true,
+                'steps' => [
+                    ['step' => 'address', 'ok' => true, 'detail' => 'agent.example.com points to a public server.'],
+                    ['step' => 'handshake', 'ok' => false, 'detail' => 'A new kind of step failed.'],
+                ],
+            ]))),
+        ]);
+
+        $result = $client->voice->agents->test(self::AGENT_ID, ['kind' => VoiceAgentKind::WEBSOCKET]);
+
+        $this->assertSame('{"kind":"websocket"}', (string) $this->lastRequest()->getBody());
+        $this->assertFalse($result['ok']);
+        $this->assertSame('proxy_refused', $result['outcome']);
+        $this->assertNull($result['status']);
+        $this->assertNull($result['latencyMs']);
+        $this->assertSame('handshake', $result['steps'][1]['step']);
+        $this->assertFalse($result['steps'][1]['ok']);
+    }
+
+    public function testAgentsTestUnknownAgentThrowsNotFound(): void
+    {
+        $client = $this->createMockClient([
+            $this->apiError('POST', '/voice/agents/x/test', 404, 'agent_not_found', 'Agent not found'),
+        ]);
+
+        $this->expectException(NotFoundException::class);
+        $client->voice->agents->test(self::AGENT_ID);
+    }
+
+    public function testAgentTestConstantsMatchTheWire(): void
+    {
+        $this->assertSame(
+            ['ok', 'blocked_destination', 'unreachable', 'timeout', 'tls_failed', 'auth_required', 'auth_failed', 'not_found', 'rejected', 'bad_reply'],
+            array_values((new \ReflectionClass(VoiceAgentTestOutcome::class))->getConstants())
+        );
+        $this->assertSame(
+            ['address', 'connect', 'login', 'reply'],
+            array_values((new \ReflectionClass(VoiceAgentTestStepName::class))->getConstants())
+        );
+    }
+
     public function testAgentsDeleteReturnsConfirmation(): void
     {
         $client = $this->createMockClient([
@@ -926,6 +1038,7 @@ class VoiceTest extends TestCase
             fn() => $client->voice->agents->get(''),
             fn() => $client->voice->agents->update(' ', ['name' => 'Front desk']),
             fn() => $client->voice->agents->delete(''),
+            fn() => $client->voice->agents->test(''),
         ];
 
         foreach ($calls as $call) {
