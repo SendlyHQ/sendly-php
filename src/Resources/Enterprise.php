@@ -36,11 +36,37 @@ class EnterpriseWorkspaces
     }
 
     /**
-     * @return array{workspaces: array<array<string, mixed>>, maxWorkspaces: int, workspacesUsed: int}
+     * List the workspaces the key's owner owns, newest first.
+     *
+     * @param array{limit?: int, page?: int, search?: string, status?: string, verification?: string, sort?: string, compact?: bool, tags?: string|array<int, string>} $options
+     *   Filters and paging, each left out when absent. `limit` is the page
+     *   size (up to 100, default 50) and `page` starts at 1. `search` matches
+     *   names, ignoring case. `status` and `verification` keep workspaces
+     *   with that status (`all`, the default, keeps every one;
+     *   `verification` `unverified` keeps those without a verification).
+     *   `sort` is `created_desc` (the default), `created_asc`, `name_asc`,
+     *   `name_desc`, `credits_desc` or `credits_asc`. `tags` keeps
+     *   workspaces with at least one of these tag ids. `compact` true
+     *   returns every workspace's id, name and balance instead, ignoring the
+     *   filters and paging.
+     * @return array<string, mixed> `workspaces` with the page's totals, or the compact list.
      */
-    public function list(): array
+    public function list(array $options = []): array
     {
-        return $this->client->get('/enterprise/workspaces');
+        $params = [];
+        foreach (['limit', 'page', 'search', 'status', 'verification', 'sort'] as $key) {
+            if (isset($options[$key])) {
+                $params[$key] = $options[$key];
+            }
+        }
+        if (isset($options['tags'])) {
+            $params['tags'] = is_array($options['tags']) ? implode(',', $options['tags']) : $options['tags'];
+        }
+        if (($options['compact'] ?? false) === true) {
+            $params['compact'] = 'true';
+        }
+
+        return $this->client->get('/enterprise/workspaces', $params);
     }
 
     /**
@@ -967,8 +993,17 @@ class Enterprise
     }
 
     /**
+     * Upload a business registration document for a toll-free verification.
+     *
+     * The API takes a PNG, JPEG, GIF or WEBP image, or a PDF, up to 10 MB,
+     * and reads the file part's content type: any other type is refused.
+     * The type is guessed from the file name's extension; pass
+     * `contentType` when the name has no extension or a different one.
+     *
      * @param string $filePath
-     * @param array{workspaceId?: string, verificationId?: string} $options
+     * @param array{workspaceId?: string, verificationId?: string, contentType?: string} $options
+     *   `contentType` is the file part's MIME type: `image/png`, `image/jpeg`,
+     *   `image/gif`, `image/webp` or `application/pdf`.
      * @return array{url: string, id: string}
      * @throws ValidationException
      */
@@ -989,6 +1024,10 @@ class Enterprise
                 'filename' => basename($filePath),
             ],
         ];
+
+        if (isset($options['contentType'])) {
+            $multipart[0]['headers'] = ['Content-Type' => $options['contentType']];
+        }
 
         if (isset($options['workspaceId'])) {
             $multipart[] = [

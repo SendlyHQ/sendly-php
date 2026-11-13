@@ -22,7 +22,8 @@ class Conversations
     /**
      * List conversations
      *
-     * @param array{limit?: int, offset?: int, status?: string} $options Query options
+     * @param array{limit?: int, offset?: int, status?: string, label?: string} $options Query options.
+     *   `label` is a label id: only conversations with that label are listed.
      * @return array{data: array<array<string, mixed>>, pagination: array{total: int, limit: int, offset: int, hasMore: bool}}
      */
     public function list(array $options = []): array
@@ -31,6 +32,7 @@ class Conversations
             'limit' => min($options['limit'] ?? 20, 100),
             'offset' => $options['offset'] ?? 0,
             'status' => $options['status'] ?? null,
+            'label' => $options['label'] ?? null,
         ], fn($v) => $v !== null);
 
         return $this->client->get('/conversations', $params);
@@ -234,8 +236,12 @@ class Conversations
     /**
      * Generate AI-suggested replies for a conversation
      *
+     * When the workspace's enterprise account turned AI suggestions off,
+     * `suggestions` is empty, `disabled` is true and `reason` is
+     * `enterprise_policy`.
+     *
      * @param string $id Conversation ID
-     * @return array{suggestions: array<array<string, mixed>>, basedOnMessageId?: string, model?: string}
+     * @return array{suggestions: array<array<string, mixed>>, basedOnMessageId?: string, model?: string, disabled?: bool, reason?: string}
      * @throws ValidationException If ID is empty
      */
     public function suggestReplies(string $id): array

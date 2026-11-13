@@ -180,11 +180,13 @@ class Campaigns
      * Schedule a campaign for future delivery
      *
      * @param string $id Campaign ID
-     * @param string $scheduledAt ISO 8601 datetime for when to send
+     * @param string $scheduledAt ISO 8601 datetime for when to send, with an offset or `Z`
+     * @param string|null $timezone Time zone stored with the schedule, such as
+     *   `Europe/London`. Omitted when null, and the API then uses `America/New_York`.
      * @return array<string, mixed>
      * @throws ValidationException If parameters are invalid
      */
-    public function schedule(string $id, string $scheduledAt): array
+    public function schedule(string $id, string $scheduledAt, ?string $timezone = null): array
     {
         if (empty($id)) {
             throw new ValidationException('Campaign ID is required');
@@ -194,9 +196,12 @@ class Campaigns
             throw new ValidationException('Scheduled time is required');
         }
 
-        return $this->client->post("/campaigns/" . rawurlencode($id) . "/schedule", [
-            'scheduledAt' => $scheduledAt,
-        ]);
+        $body = ['scheduledAt' => $scheduledAt];
+        if ($timezone !== null) {
+            $body['timezone'] = $timezone;
+        }
+
+        return $this->client->post("/campaigns/" . rawurlencode($id) . "/schedule", $body);
     }
 
     /**

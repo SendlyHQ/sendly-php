@@ -27,6 +27,7 @@ use Sendly\Resources\TenDlc;
 use Sendly\Resources\Links;
 use Sendly\Resources\WhatsApp;
 use Sendly\Resources\Rcs;
+use Sendly\Resources\ShortCodes;
 use Sendly\Resources\Calls;
 use Sendly\Resources\Voice;
 use Sendly\Exceptions\SendlyException;
@@ -82,6 +83,7 @@ class Sendly
     public Links $links;
     public WhatsApp $whatsapp;
     public Rcs $rcs;
+    public ShortCodes $shortCodes;
     public Calls $calls;
     public Voice $voice;
 
@@ -127,6 +129,7 @@ class Sendly
         $this->links = new Links($this);
         $this->whatsapp = new WhatsApp($this);
         $this->rcs = new Rcs($this);
+        $this->shortCodes = new ShortCodes($this);
         $this->calls = new Calls($this);
         $this->voice = new Voice($this);
     }
@@ -322,6 +325,16 @@ class Sendly
     }
 
     /**
+     * Get the Short Codes resource
+     *
+     * @return ShortCodes
+     */
+    public function shortCodes(): ShortCodes
+    {
+        return $this->shortCodes;
+    }
+
+    /**
      * Get the Calls resource
      *
      * @return Calls
@@ -463,6 +476,32 @@ class Sendly
     public function postWithoutRetry(string $path, array $body = []): array
     {
         return $this->request('POST', $path, ['json' => $body] + $this->newConnectionOptions(), null, true, false);
+    }
+
+    /**
+     * Make a JSON request that carries a caller-supplied idempotency key.
+     * A POST without a key gets an auto-generated one, as with post(). With
+     * $retry false it goes out on a new connection, and a 5xx or a failed
+     * connection is thrown at once, as with postWithoutRetry().
+     *
+     * @internal
+     * @param string $method HTTP method
+     * @param string $path API endpoint path
+     * @param array<string, mixed> $body Request body
+     * @param string|null $idempotencyKey Caller-supplied idempotency key (1-255 printable
+     *   ASCII characters)
+     * @param bool $retry Whether a 5xx or a failed connection is retried
+     * @return array<string, mixed> Response data
+     * @throws SendlyException
+     */
+    public function requestIdempotent(string $method, string $path, array $body, ?string $idempotencyKey, bool $retry = true): array
+    {
+        $options = ['json' => $body === [] ? new \stdClass() : $body];
+        if (!$retry) {
+            $options += $this->newConnectionOptions();
+        }
+
+        return $this->request($method, $path, $options, $idempotencyKey, true, $retry);
     }
 
     /**

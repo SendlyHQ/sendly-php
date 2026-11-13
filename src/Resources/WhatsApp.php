@@ -92,6 +92,12 @@ class WhatsAppSignup
      *   A null `businessAccountId` starts a Facebook connection, which
      *   ignores `verificationMethod` and `displayName`; a blank one throws a
      *   ValidationException.
+     * @param string|null $idempotencyKey Idempotency key (1-255 printable
+     *   ASCII characters). Overrides the auto-generated per-request key;
+     *   repeating the call with the same key within 24 hours returns the
+     *   first answer instead of starting, and charging, another signup.
+     *   Without `businessAccountId` a 5xx is still retried under this key;
+     *   with it, nothing is retried, so call again with the same key.
      * @return ($options is array{businessAccountId: non-empty-string} ? WhatsAppSignupSession : array{id: string, connectUrl: string, status: string})
      *   Without `businessAccountId`, the signup with its `connectUrl`.
      *   `status` is `initiated` (waiting for a human to complete the connect
@@ -100,7 +106,7 @@ class WhatsAppSignup
      *   returns it, `status` `verifying`, without `verificationCode`.
      * @throws ValidationException If the number is not E.164, not in your workspace, or not eligible.
      */
-    public function create(string $phoneNumber, array $options = []): array
+    public function create(string $phoneNumber, array $options = [], ?string $idempotencyKey = null): array
     {
         $this->validatePhone($phoneNumber);
 
@@ -117,9 +123,11 @@ class WhatsAppSignup
             'displayName' => $options['displayName'] ?? null,
         ], fn($v) => $v !== null));
 
-        return ($body['businessAccountId'] ?? '') === ''
-            ? $this->client->post('/whatsapp/signup', $body)
-            : $this->client->postWithoutRetry('/whatsapp/signup', $body);
+        return match (true) {
+            ($body['businessAccountId'] ?? '') === '' => $this->client->post('/whatsapp/signup', $body, $idempotencyKey),
+            $idempotencyKey === null => $this->client->postWithoutRetry('/whatsapp/signup', $body),
+            default => $this->client->requestIdempotent('POST', '/whatsapp/signup', $body, $idempotencyKey, false),
+        };
     }
 
     /**
@@ -636,6 +644,10 @@ class WhatsAppTemplates
      *   `header` is fixed text: a header containing `{{n}}` is refused with
      *   `template_header_variable_unsupported`, because sends fill only body
      *   and button variables.
+     * @param string|null $idempotencyKey Idempotency key (1-255 printable
+     *   ASCII characters). Overrides the auto-generated per-request key; a
+     *   retry with the same key within 24 hours returns the template created
+     *   the first time instead of submitting it again.
      * @return array{id: string, name: string, language: string, category: string, status: string, body: ?string, header: ?string, footer: ?string, examples: array<string, string>, qualityRating: ?string, rejectionReason: ?string, createdAt: string, updatedAt: string, warnings?: array<int, string>}
      *   The created template (status `PENDING`), with any non-blocking
      *   submission warnings.
@@ -649,7 +661,7 @@ class WhatsAppTemplates
      * @throws \Sendly\Exceptions\NotFoundException `whatsapp_sender_not_connected` (404) if the
      *   sender isn't connected to WhatsApp; this is checked first.
      */
-    public function create(array $params): array
+    public function create(array $params, ?string $idempotencyKey = null): array
     {
         if (empty($params['sender'])) {
             throw new ValidationException('sender is required');
@@ -680,7 +692,7 @@ class WhatsAppTemplates
             'examples' => $params['examples'] ?? null,
         ], fn($v) => $v !== null);
 
-        return $this->client->post('/whatsapp/templates', $body);
+        return $this->client->post('/whatsapp/templates', $body, $idempotencyKey);
     }
 
     /**
@@ -702,7 +714,9 @@ class WhatsAppTemplates
      *   examples?: array<string, string>
      * } $params The fields to change; omitted fields keep their current value.
      *   `header` can't contain `{{n}}` variables
-     *   (`template_header_variable_unsupported`).
+     *   (`template_header_variable_unsupported`). Pass `'footer' => ''` or
+     *   `'header' => ''` to remove the footer or header, and
+     *   `'buttons' => []` to remove every button.
      * @return array{id: string, name: string, language: string, category: string, status: string, body: ?string, header: ?string, footer: ?string, examples: array<string, string>, qualityRating: ?string, rejectionReason: ?string, createdAt: string, updatedAt: string}
      *   The updated template (status `PENDING`).
      * @throws ValidationException If ID is empty.

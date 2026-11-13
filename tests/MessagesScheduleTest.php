@@ -510,4 +510,62 @@ class MessagesScheduleTest extends TestCase
 
         $client->messages()->cancelScheduled('sched_123');
     }
+
+    /**
+     * @param array<int, array{request: \Psr\Http\Message\RequestInterface, response: ?Response}> $history
+     */
+    private function createRecordingClient(array $responses, array &$history): Sendly
+    {
+        $handlerStack = HandlerStack::create(new MockHandler($responses));
+        $handlerStack->push(\GuzzleHttp\Middleware::history($history));
+        $client = new Sendly('test_api_key');
+        (new ReflectionClass($client))->getProperty('httpClient')->setValue($client, new Client(['handler' => $handlerStack]));
+
+        return $client;
+    }
+
+    public function testScheduleSendsATimezoneAndReadsItBack(): void
+    {
+        $history = [];
+        $client = $this->createRecordingClient([
+            new Response(201, [], json_encode([
+                'id' => 'schd_1',
+                'to' => '+15551234567',
+                'text' => 'Your appointment is tomorrow!',
+                'scheduledAt' => '2030-01-15T14:00:00.000Z',
+                'timezone' => 'America/New_York',
+                'status' => 'scheduled',
+                'creditsReserved' => 2,
+                'segments' => 1,
+                'senderType' => 'number_pool',
+                'createdAt' => '2030-01-14T12:00:00.000Z',
+            ])),
+        ], $history);
+
+        $result = $client->messages()->schedule(
+            '+15551234567',
+            'Your appointment is tomorrow!',
+            '2030-01-15T09:00:00-05:00',
+            timezone: 'America/New_York'
+        );
+
+        $this->assertSame('/api/v1/messages/schedule', $history[0]['request']->getUri()->getPath());
+        $body = json_decode((string) $history[0]['request']->getBody(), true);
+        $this->assertSame('America/New_York', $body['timezone']);
+        $this->assertSame('2030-01-15T09:00:00-05:00', $body['scheduledAt']);
+        $this->assertSame('America/New_York', $result['timezone']);
+    }
+
+    public function testScheduleWithoutATimezoneLeavesItOut(): void
+    {
+        $history = [];
+        $client = $this->createRecordingClient([
+            new Response(201, [], json_encode(['id' => 'schd_1', 'timezone' => 'UTC', 'status' => 'scheduled'])),
+        ], $history);
+
+        $client->messages()->schedule('+15551234567', 'Hello', '2030-01-15T09:00:00Z');
+
+        $body = json_decode((string) $history[0]['request']->getBody(), true);
+        $this->assertArrayNotHasKey('timezone', $body);
+    }
 }

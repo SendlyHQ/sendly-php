@@ -8,6 +8,7 @@ use Sendly\Sendly;
 use Sendly\Webhook;
 use Sendly\WebhookCreatedResponse;
 use Sendly\WebhookDelivery;
+use Sendly\WebhookRecoveryPreview;
 use Sendly\WebhookTestResult;
 use Sendly\WebhookSecretRotation;
 use Sendly\Exceptions\ValidationException;
@@ -263,6 +264,36 @@ class Webhooks
         );
 
         return $this->client->post("/webhooks/" . rawurlencode($id) . "/backfill", $body);
+    }
+
+    /**
+     * Preview a recovery: count what redeliver() and backfill() would send
+     * for a window, without sending anything. The window is at most 7 days.
+     *
+     * @param string $id Webhook ID
+     * @param array{since?: string, until?: string, event_types?: array<int,string>} $options
+     *        event_types is sent comma-separated; all types are counted when it is left out
+     * @return WebhookRecoveryPreview The preview
+     * @throws ValidationException If ID is empty
+     */
+    public function recoveryPreview(string $id, array $options = []): WebhookRecoveryPreview
+    {
+        if (empty($id)) {
+            throw new ValidationException('Webhook ID is required');
+        }
+
+        $eventTypes = $options['event_types'] ?? null;
+        $params = array_filter(
+            [
+                'since' => $options['since'] ?? null,
+                'until' => $options['until'] ?? null,
+                'event_types' => is_array($eventTypes) && $eventTypes !== [] ? implode(',', $eventTypes) : null,
+            ],
+            static fn ($v) => $v !== null,
+        );
+
+        $response = $this->client->get("/webhooks/" . rawurlencode($id) . "/recovery-preview", $params);
+        return new WebhookRecoveryPreview($response);
     }
 
     /**

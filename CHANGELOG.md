@@ -1,5 +1,20 @@
 # sendly/sendly-php
 
+## 4.7.0
+
+### Minor Changes
+
+- **Preview a webhook recovery.** `webhooks()->recoveryPreview($id, ['since' => ..., 'until' => ..., 'event_types' => [...]])` reads `GET /webhooks/:id/recovery-preview` and returns the new `Sendly\WebhookRecoveryPreview` (`circuitState`, `circuitOpenedAt`, `failureCount`, `auditFailures`, `missingFromMessages`, `histogram`, `samples`, `windowSuggestion`, `since`, `until` and `isCircuitOpen()`): what `redeliver()` and `backfill()` would send for the window, without sending anything. `event_types` goes as one comma-separated value, and the window is at most 7 days.
+- **`conversations()->suggestReplies()` documents `disabled` and `reason`.** When the workspace's enterprise account turned AI suggestions off, the returned array has an empty `suggestions`, `disabled` set to `true` and `reason` set to `'enterprise_policy'`. The response was already returned as is; nothing changes at runtime.
+- **Short codes.** New `shortCodes()` resource: `list()` (`GET /short_codes`, every application and code with its `billing`), and on `shortCodes()->application`: `get()`, `update($answers, $idempotencyKey = null)` (`PUT`, creates the application on the first save; ignored fields come back in `ignoredFields`), `check($answers = [])` (a dry run that saves nothing) and `submit(['acceptTerms' => true, ...], $idempotencyKey = null)`, which charges the one-time setup fee and reports it in `payment`. Every method returns a plain array; `ShortCodeStatus` and `ShortCodeReviewStatus` hold the status values. It needs the `short_codes:read` or `short_codes:write` scope, and answers 404 `short_codes_not_enabled` until short codes are on for the account.
+- **Your own idempotency key on WhatsApp signup and template creation.** `whatsapp()->signup->create($phoneNumber, $options, $idempotencyKey)` and `whatsapp()->templates->create($params, $idempotencyKey)` take an optional key, so a retry from another process returns the first answer instead of starting, and charging for, a second signup or submitting the template twice. Adding a number by code (`businessAccountId`) is still never retried after a 5xx or a failed connection; call again with the same key. Without a key, an automatic one is sent as before.
+- **`messages()->schedule()` takes `timezone`.** A new last parameter (use it by name: `timezone: 'America/New_York'`) is stored with the message and returned as sent; the API uses `UTC` when it is left out. It does not change when the message goes: give `scheduledAt` an offset or `Z`.
+- **`campaigns()->schedule($id, $scheduledAt, $timezone = null)`** sends `timezone`, stored with the schedule; the API uses `America/New_York` when it is left out.
+- **`enterprise()->uploadVerificationDocument()` takes a `contentType` option.** The API reads the file part's type and refuses anything but a PNG, JPEG, GIF, WEBP or PDF type; the type is still guessed from the file name, and `contentType` sets it for a file whose name has no extension or a different one.
+- **`conversations()->list(['label' => $labelId])`** lists only conversations with that label.
+- **`enterprise->workspaces->list($options)`** takes `limit`, `page`, `search`, `status`, `verification`, `sort`, `tags` (an array or a comma-separated string) and `compact`. Called without options it sends the same request as before.
+- `whatsapp()->templates->update()` documents that `'footer' => ''`, `'header' => ''` and `'buttons' => []` remove them; they were already sent.
+
 ## 4.5.0
 
 ### Minor Changes

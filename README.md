@@ -189,6 +189,16 @@ echo $scheduled['scheduledAt'];
 echo $scheduled['status'];          // "scheduled"
 echo $scheduled['creditsReserved']; // reserved now, refunded if you cancel
 
+// Store a time zone label with it. The label is returned as sent and does
+// not change when the message goes: scheduledAt carries its own offset.
+$scheduled = $client->messages()->schedule(
+    '+12125550123',
+    'Your appointment is tomorrow!',
+    '2030-01-15T09:00:00-05:00',
+    timezone: 'America/New_York'
+);
+echo $scheduled['timezone']; // "America/New_York"
+
 // List scheduled messages: rows under 'data', how many under 'count'
 $result = $client->messages()->listScheduled(['limit' => 20]);
 foreach ($result['data'] as $msg) {
@@ -544,6 +554,9 @@ gives its slot back.
 // 1. Connect a number ($9.99 one-time). A human must finish the connect URL.
 $signup = $client->whatsapp()->signup->create('+12125550147');
 echo $signup['connectUrl']; // hand this to a person to complete in a browser
+// Pass your own key so a retry from another process can't start, and charge
+// for, a second signup:
+// $client->whatsapp()->signup->create('+12125550147', [], 'connect-acme-4821');
 
 // Poll until active. After the Facebook step the signup stays "registering"
 // while WhatsApp activates the number. Activation usually takes a few minutes
@@ -642,7 +655,7 @@ $template = $client->whatsapp()->templates->create([
     'category' => 'UTILITY',
     'body' => 'Hi {{1}}, your order {{2}} has shipped!',
     'examples' => ['1' => 'Sam', '2' => '#4821'],
-]);
+], idempotencyKey: 'template-order-shipped');
 echo $template['status']; // "PENDING"
 
 // Fix a rejected template by editing it (template names are locked for
@@ -1313,6 +1326,9 @@ $client->webhooks()->retryDelivery('whk_xxx', 'del_xxx');
 $client->webhooks()->resetCircuit('whk_xxx');
 // The window runs from 'since' to 'until' (default: now) and is at most 7 days.
 $since = gmdate('Y-m-d\TH:i:s\Z', strtotime('-2 days'));
+// See what a recovery would send, without sending anything:
+$preview = $client->webhooks()->recoveryPreview('whk_xxx', ['since' => $since]);
+echo "{$preview->auditFailures['total']} failed, {$preview->missingFromMessages['total']} missing\n";
 // Re-fire deliveries we recorded but could not deliver:
 $client->webhooks()->redeliver('whk_xxx', ['since' => $since]);
 // Synthesize events that never got an audit row. A synthesized event reuses
@@ -1623,6 +1639,8 @@ $result = $client->campaigns()->send($campaign['id']);
 echo "{$result['batchId']}: {$result['sent']}/{$result['total']} sent";
 // or
 $client->campaigns()->schedule($campaign['id'], gmdate('Y-m-d\TH:i:s\Z', strtotime('+1 day')));
+// with a time zone stored alongside it (America/New_York when left out)
+$client->campaigns()->schedule($campaign['id'], '2030-01-15T09:00:00Z', 'Europe/London');
 $client->campaigns()->cancel($campaign['id']);
 
 $client->campaigns()->clone($campaign['id'], 'Spring sale round 2');
@@ -1650,6 +1668,7 @@ Two-way threads, with the AI helpers built on them.
 
 ```php
 $threads = $client->conversations()->list(['status' => 'active', 'limit' => 20]);
+$vip = $client->conversations()->list(['label' => 'lbl_xxx']); // only threads with this label id
 foreach ($threads['data'] as $t) {
     echo $t['id'] . "\n";
 }
@@ -1768,33 +1787,62 @@ $client->tenDlc()->listAssignments();
 
 ## Short Codes
 
-This SDK still has **no short-code helper methods**. Short codes are reachable
-over REST with the client's own request methods, which return the decoded
-response and throw the same exceptions as every other call:
+A short code is a 5 or 6 digit US sender. Getting one is an application, not
+a purchase: you fill it in, Sendly reviews it, the carrier forms are signed,
+Sendly files it, and each carrier certifies the code separately. Every method
+returns a plain array.
 
 ```php
-// Your workspace's short codes
-$codes = $client->get('/short_codes');
+use Sendly\Resources\ShortCodeStatus;
+
+// Every application and code of the workspace, newest first, each with billing
+$codes = $client->shortCodes()->list();
 foreach ($codes['shortCodes'] as $c) {
-    echo "{$c['shortCode']} {$c['status']} / {$c['reviewStatus']}\n";
+    if ($c['status'] === ShortCodeStatus::ACTIVE) {
+        echo "{$c['shortCode']} / {$c['reviewStatus']}\n";
+    }
 }
 
-// Start an application (one open application per workspace)
+// The application, the documents it needs, the quote and where the fee stands
+$view = $client->shortCodes()->application->get();
+if (!$view['editable']) {
+    echo $view['lockMessage'];
+}
+
+// Save answers (creates the application on the first save). Fields Sendly or
+// the carriers own are ignored and named in 'ignoredFields'.
+$client->shortCodes()->application->update([
+    'useCase' => 'Delivery alerts for Acme orders',
+    'messageFrequency' => '4 messages per month',
+], idempotencyKey: 'acme-short-code-save-1');
+
+// Check against the carrier rules without saving anything
+$check = $client->shortCodes()->application->check();
+foreach ($check['issues'] as $issue) {
+    echo "{$issue['path']}: {$issue['message']}\n";
+}
+
+// Submit for review. This charges the one-time $999 setup fee, refunded in
+// full if Sendly rejects the application before filing it. Submitting twice
+// is safe: the second call reports alreadySubmitted and charges nothing.
+$result = $client->shortCodes()->application->submit(
+    ['acceptTerms' => true],
+    idempotencyKey: 'acme-short-code-submit-1'
+);
+echo $result['payment']['status']; // "paid"
+```
+
+Starting an application with only a use case and an opt-in flow has no helper;
+use the client's request methods, which return the decoded response and throw
+the same exceptions as every other call:
+
+```php
 $request = $client->post('/short_codes/requests', [
     'useCase' => 'Order notifications and delivery alerts',
     'optInFlow' => 'Customers tick a consent box at checkout.',
     'sampleMessages' => ['Your order #4821 has shipped.'],
-    'expectedMonthlyVolume' => '50000',
-    'helpResponse' => 'Acme: reply STOP to opt out.',
-    'stopConfirmation' => 'Acme: you are opted out and will get no more messages.',
 ]);
 echo $request['id'];
-
-// The application itself
-$application = $client->get('/short_codes/application');
-$client->put('/short_codes/application', ['useCase' => 'Updated use case']);
-$client->post('/short_codes/application/preflight');
-$client->post('/short_codes/application/submit');
 ```
 
 Reads need an API key with the `short_codes:read` scope and writes
@@ -2137,6 +2185,14 @@ Three provisioning modes:
 ```php
 $ws = $client->enterprise->workspaces->create(['name' => 'Acme Insurance']);
 $list = $client->enterprise->workspaces->list();
+// Filter, sort and page: limit (up to 100), page, search, status, verification
+// ('unverified' keeps those without one), sort, tags; compact => true lists
+// every workspace's id, name and balance instead
+$unverified = $client->enterprise->workspaces->list([
+    'verification' => 'unverified',
+    'sort' => 'name_asc',
+    'limit' => 100,
+]);
 $detail = $client->enterprise->workspaces->get('ws_xxx');
 $client->enterprise->workspaces->delete('ws_xxx');
 

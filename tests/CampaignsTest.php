@@ -327,4 +327,31 @@ class CampaignsTest extends TestCase
         $this->assertCount(100, $campaigns);
         $this->assertCount(2, $this->history);
     }
+
+    public function testScheduleSendsATimezoneWhenGiven(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode($this->wireCampaign('camp_1', ['status' => 'scheduled']))),
+        ]);
+
+        $client->campaigns()->schedule('camp_1', '2030-01-15T09:00:00Z', 'Europe/London');
+
+        $this->assertSame('POST', $this->history[0]['request']->getMethod());
+        $this->assertSame('/api/v1/campaigns/camp_1/schedule', $this->history[0]['request']->getUri()->getPath());
+        $this->assertSame(
+            ['scheduledAt' => '2030-01-15T09:00:00Z', 'timezone' => 'Europe/London'],
+            $this->sentBody()
+        );
+    }
+
+    public function testScheduleWithoutATimezoneSendsOnlyScheduledAt(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode($this->wireCampaign('camp_1', ['status' => 'scheduled']))),
+        ]);
+
+        $client->campaigns()->schedule('camp_1', '2030-01-15T09:00:00Z');
+
+        $this->assertSame(['scheduledAt' => '2030-01-15T09:00:00Z'], $this->sentBody());
+    }
 }

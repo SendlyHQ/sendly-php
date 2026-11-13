@@ -974,4 +974,109 @@ class WhatsAppExtrasTest extends TestCase
         }
         $this->assertCount(1, $this->history, 'an unconfirmed send must not be retried');
     }
+
+    // ==================== caller-supplied idempotency keys ====================
+
+    public function testSignupCreateSendsTheCallersIdempotencyKey(): void
+    {
+        $client = $this->createMockClient([
+            new Response(201, [], json_encode([
+                'id' => 'was_1',
+                'connectUrl' => 'https://sendly.live/whatsapp/connect?token=tok_abc',
+                'status' => 'initiated',
+            ])),
+        ]);
+
+        $client->whatsapp()->signup->create(self::SENDER, [], 'connect-acme-1');
+
+        $this->assertSame('/api/v1/whatsapp/signup', $this->lastRequest()->getUri()->getPath());
+        $this->assertSame('connect-acme-1', $this->lastRequest()->getHeaderLine('Idempotency-Key'));
+        $this->assertSame(['phoneNumber' => self::SENDER], $this->sentBody());
+    }
+
+    public function testSignupCreateByCodeSendsTheCallersKeyAndStillDoesNotRetry(): void
+    {
+        $client = $this->createMockClient([
+            $this->apiError('POST', '/whatsapp/signup', 500, [
+                'error' => 'internal_error',
+                'message' => 'Something went wrong.',
+            ]),
+            new Response(201, [], json_encode($this->verifyingSignup())),
+        ]);
+        $this->skipSleeps($client);
+
+        try {
+            $client->whatsapp()->signup->create(
+                self::SENDER,
+                ['businessAccountId' => '102938475610293'],
+                'add-number-acme-1'
+            );
+            $this->fail('Expected SendlyException');
+        } catch (SendlyException $e) {
+            $this->assertSame(500, $e->getCode());
+        }
+        $this->assertCount(1, $this->history);
+        $this->assertSame('add-number-acme-1', $this->lastRequest()->getHeaderLine('Idempotency-Key'));
+        $this->assertSame('102938475610293', $this->sentBody()['businessAccountId']);
+    }
+
+    public function testSignupCreateWithoutAKeyStillSendsAnAutoKey(): void
+    {
+        $client = $this->createMockClient([
+            new Response(201, [], json_encode($this->verifyingSignup())),
+        ]);
+
+        $client->whatsapp()->signup->create(self::SENDER, ['businessAccountId' => '102938475610293']);
+
+        $this->assertNotSame('', $this->lastRequest()->getHeaderLine('Idempotency-Key'));
+    }
+
+    public function testTemplatesCreateSendsTheCallersIdempotencyKey(): void
+    {
+        $client = $this->createMockClient([
+            new Response(201, [], json_encode([
+                'id' => 'wat_1',
+                'name' => 'order_shipped',
+                'language' => 'en_US',
+                'category' => 'UTILITY',
+                'status' => 'PENDING',
+            ])),
+        ]);
+
+        $template = $client->whatsapp()->templates->create([
+            'sender' => self::SENDER,
+            'name' => 'order_shipped',
+            'language' => 'en_US',
+            'category' => 'UTILITY',
+            'body' => 'Hi {{1}}, your order has shipped!',
+            'examples' => ['1' => 'Sam'],
+        ], 'template-order-shipped-1');
+
+        $this->assertSame('POST', $this->lastRequest()->getMethod());
+        $this->assertSame('/api/v1/whatsapp/templates', $this->lastRequest()->getUri()->getPath());
+        $this->assertSame('template-order-shipped-1', $this->lastRequest()->getHeaderLine('Idempotency-Key'));
+        $this->assertSame('order_shipped', $this->sentBody()['name']);
+        $this->assertSame('PENDING', $template['status']);
+    }
+
+    public function testTemplatesUpdateSendsEmptyValuesThatClearFooterHeaderAndButtons(): void
+    {
+        $client = $this->createMockClient([
+            new Response(200, [], json_encode([
+                'id' => 'wat_1',
+                'name' => 'order_shipped',
+                'language' => 'en_US',
+                'category' => 'UTILITY',
+                'status' => 'PENDING',
+                'footer' => null,
+                'header' => null,
+            ])),
+        ]);
+
+        $client->whatsapp()->templates->update('wat_1', ['footer' => '', 'header' => '', 'buttons' => []]);
+
+        $this->assertSame('PATCH', $this->lastRequest()->getMethod());
+        $this->assertSame('/api/v1/whatsapp/templates/wat_1', $this->lastRequest()->getUri()->getPath());
+        $this->assertSame('{"footer":"","header":"","buttons":[]}', (string) $this->lastRequest()->getBody());
+    }
 }

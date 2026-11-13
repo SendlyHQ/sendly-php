@@ -518,10 +518,13 @@ class Messages
      * @param string|null $messageType Message type: 'marketing' (default, subject to quiet hours) or 'transactional' (24/7)
      * @param array<string, mixed>|null $metadata Custom JSON metadata to attach to the message (max 4KB)
      * @param string|null $idempotencyKey Idempotency key (1-255 printable ASCII characters). Overrides the auto-generated per-request key.
+     * @param string|null $timezone A time zone label such as `America/New_York`, stored with the
+     *   message and returned as sent (`UTC` when omitted). It does not change how `$scheduledAt` is
+     *   read: give that an offset or `Z`.
      * @return array<string, mixed> The scheduled message
      * @throws ValidationException If parameters are invalid
      */
-    public function schedule(string $to, string $text, string $scheduledAt, ?string $from = null, ?string $messageType = null, ?array $metadata = null, ?string $idempotencyKey = null): array
+    public function schedule(string $to, string $text, string $scheduledAt, ?string $from = null, ?string $messageType = null, ?array $metadata = null, ?string $idempotencyKey = null, ?string $timezone = null): array
     {
         $this->validatePhone($to);
         $this->validateText($text);
@@ -547,6 +550,10 @@ class Messages
 
         if ($metadata !== null) {
             $payload['metadata'] = $metadata;
+        }
+
+        if ($timezone !== null) {
+            $payload['timezone'] = $timezone;
         }
 
         return $this->client->post('/messages/schedule', $payload, $idempotencyKey);
